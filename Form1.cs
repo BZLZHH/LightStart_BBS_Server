@@ -12,8 +12,9 @@ namespace LightStart_BBS_server
 {
     public partial class Form1 : Form
     {
+
         Server server = new Server();
-        static SQLiteManager manager_user;
+        public static SQLiteManager manager_user;
         public static TextBox LogBox;
 
         public Form1()
@@ -45,12 +46,29 @@ namespace LightStart_BBS_server
                 columns["salt"] = "TEXT";
                 columns["sharedKey"] = "TEXT";
                 columns["token"] = "TEXT";
+                columns["usergroup"] = "TEXT";
+                columns["ban"] = "TEXT";
+                columns["moreInfoJson"] = "TEXT";
                 manager_user.CreateTable(tableName, columns);
                 log("创建表格\r\n");
             }
 
             server.Start();
             log("服务器已开启\r\n");
+        }
+
+        public static int getUserGroup(string id)
+        {
+            Dictionary<string, string> valuePairs = getUserByIDPW(id, "");
+            return int.Parse(valuePairs["usergroup"]);
+        }
+
+        public static void setUserGroup(string id, int group)
+        {
+            Dictionary<string, string> row = new Dictionary<string, string>();
+            row.Add("usergroup", group.ToString());
+            string condition = "id='" + id + "'";
+            manager_user.Update(row, condition);
         }
 
         public static string ReadMsgConfigConfig()
@@ -128,6 +146,9 @@ namespace LightStart_BBS_server
             row["salt"] = salt;
             row["sharedKey"] = sharedKey;
             row["token"] = RandomStr(45);
+            row["usergroup"] = Constants.USERGROUP_default.ToString();
+            row["ban"] = "";
+            row["moreInfoJson"] = "";
             manager_user.Insert(row);
             return row["token"];
         }
@@ -260,14 +281,18 @@ namespace LightStart_BBS_server
         private void clientMsgboxChange_Click(object sender, EventArgs e)
         {
             clientMsgboxSetting settingForm = new clientMsgboxSetting(); // 创建clientMsgboxSetting的实例
-            settingForm.ShowDialog(); // 以模态窗口的方式显示clientMsgboxSetting窗体        }
+            settingForm.ShowDialog(); // 以模态窗口的方式显示clientMsgboxSetting窗体        
         }
 
         public class Constants
         {
-            public const int version = 1;
-        };
+            public const int version = 2;
 
+            public static readonly string[] USERGROUPS = {"default","vip","admin"}; // 顺序要与下面一致
+            public const int USERGROUP_default = 0;
+            public const int USERGROUP_vip = 1;
+            public const int USERGROUP_admin = 2;
+        }; 
 
         public class SQLiteManager
         {
@@ -532,7 +557,8 @@ namespace LightStart_BBS_server
                 {
                     err = "不是一个可用的ID";
                 }
-                if (userInfoJson["sharedKey"].ToString() != "LightStartBBSKey_Ssssss")
+                //if (userInfoJson["sharedKey"].ToString() != "LightStartBBSKey_Ssssss")
+                if (!true)
                 {
                     err = "不是一个可用的邀请码";
                 }
@@ -774,5 +800,10 @@ namespace LightStart_BBS_server
             }
         }
 
+        private void userGroupChange_Click(object sender, EventArgs e)
+        {
+            userGroupManager userGroupManager_ = new userGroupManager(); // 创建clientMsgboxSetting的实例
+            userGroupManager_.ShowDialog(); // 以模态窗口的方式显示clientMsgboxSetting窗体        
+        }
     }
 }
