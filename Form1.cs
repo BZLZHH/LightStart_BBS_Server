@@ -557,8 +557,8 @@ namespace LightStart_BBS_server
                 {
                     err = "不是一个可用的ID";
                 }
-                //if (userInfoJson["sharedKey"].ToString() != "LightStartBBSKey_Ssssss")
-                if (!true)
+                if (userInfoJson["sharedKey"].ToString() != "LightStart_Sssss")
+                //if (!true)
                 {
                     err = "不是一个可用的邀请码";
                 }
