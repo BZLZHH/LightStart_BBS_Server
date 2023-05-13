@@ -1,1 +1,4 @@
-# LightStart_BBS_Server
+# LightStart BBS Server
+This is the LightStart BBS Server.
+# Lanuage
+C# Winform
