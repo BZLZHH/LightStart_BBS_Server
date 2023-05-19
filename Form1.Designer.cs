@@ -32,7 +32,7 @@
             this.Log = new System.Windows.Forms.TextBox();
             this.GetUsersInfo = new System.Windows.Forms.Button();
             this.clientMsgboxChange = new System.Windows.Forms.Button();
-            this.userGroupChange = new System.Windows.Forms.Button();
+            this.userChange = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // restart
@@ -82,24 +82,24 @@
             this.clientMsgboxChange.UseVisualStyleBackColor = true;
             this.clientMsgboxChange.Click += new System.EventHandler(this.clientMsgboxChange_Click);
             // 
-            // userGroupChange
+            // userChange
             // 
-            this.userGroupChange.Font = new System.Drawing.Font("Microsoft YaHei UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            this.userGroupChange.Location = new System.Drawing.Point(684, 108);
-            this.userGroupChange.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            this.userGroupChange.Name = "userGroupChange";
-            this.userGroupChange.Size = new System.Drawing.Size(103, 42);
-            this.userGroupChange.TabIndex = 4;
-            this.userGroupChange.Text = "User Group Manager";
-            this.userGroupChange.UseVisualStyleBackColor = true;
-            this.userGroupChange.Click += new System.EventHandler(this.userGroupChange_Click);
+            this.userChange.Font = new System.Drawing.Font("Microsoft YaHei UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+            this.userChange.Location = new System.Drawing.Point(684, 108);
+            this.userChange.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            this.userChange.Name = "userChange";
+            this.userChange.Size = new System.Drawing.Size(103, 42);
+            this.userChange.TabIndex = 4;
+            this.userChange.Text = "User Manager";
+            this.userChange.UseVisualStyleBackColor = true;
+            this.userChange.Click += new System.EventHandler(this.userGroupChange_Click);
             // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(800, 442);
-            this.Controls.Add(this.userGroupChange);
+            this.Controls.Add(this.userChange);
             this.Controls.Add(this.clientMsgboxChange);
             this.Controls.Add(this.GetUsersInfo);
             this.Controls.Add(this.Log);
@@ -120,6 +120,6 @@
         public TextBox Log;
         private Button GetUsersInfo;
         private Button clientMsgboxChange;
-        private Button userGroupChange;
+        private Button userChange;
     }
 }

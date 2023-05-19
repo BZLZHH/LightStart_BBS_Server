@@ -57,6 +57,34 @@ namespace LightStart_BBS_server
             log("服务器已开启\r\n");
         }
 
+        public static void changeUserID(string id_before, string id_after)
+        {
+            Dictionary<string, string> row = new Dictionary<string, string>();
+            row.Add("id", id_after);
+            string condition = "id='" + id_before + "'";
+            manager_user.Update(row, condition);
+        }
+        public static void changeUserName(string id, string name_after)
+        {
+            Dictionary<string, string> row = new Dictionary<string, string>();
+            row.Add("name", name_after);
+            string condition = "id='" + id + "'";
+            manager_user.Update(row, condition);
+        }
+        public static void changeUserInvitationKey(string id, string invitationKey_after)
+        {
+            Dictionary<string, string> row = new Dictionary<string, string>();
+            row.Add("sharedKey", invitationKey_after);
+            string condition = "id='" + id + "'";
+            manager_user.Update(row, condition);
+        }
+
+        public static void deleteUser(string id)
+        {
+            string condition = "id='" + id + "'";
+            manager_user.Delete(condition);
+        }
+
         public static int getUserGroup(string id)
         {
             Dictionary<string, string> valuePairs = getUserByIDPW(id, "");
@@ -99,13 +127,28 @@ namespace LightStart_BBS_server
             LogBox.AppendText(text + "\r\n");
         }
 
-        static string RandomStr(int length)
+        public static string RandomStr(
+            int length, //长度
+            int difficulty = 2 //难度, 0=纯数字 1=纯字母 2=字母+数字 else=null
+            )
         {
             Random random = new Random();
             string result = "";
             for (int i = 0; i < length; i++)
             {
-                int type = random.Next(1, 4); // 1:数字 2:小写字母 3:大写字母
+                int type = 0; 
+                switch (difficulty)
+                {
+                    case 0:
+                        type = 1; // 1:数字 2:小写字母 3:大写字母
+                        break;
+                    case 1:
+                        type = random.Next(2, 4);
+                        break;
+                    case 2:
+                        type = random.Next(1, 4);
+                        break;
+                }
                 switch (type)
                 {
                     case 1:
@@ -130,7 +173,7 @@ namespace LightStart_BBS_server
         public static string ChangeUserToken(string id)
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
-            string token = RandomStr(45);
+            string token = RandomStr(80);
             row.Add("token", token);
             string condition = "id='" + id + "'";
             manager_user.Update(row, condition);
@@ -145,7 +188,7 @@ namespace LightStart_BBS_server
             row["password"] = password;
             row["salt"] = salt;
             row["sharedKey"] = sharedKey;
-            row["token"] = RandomStr(45);
+            row["token"] = RandomStr(80);
             row["usergroup"] = Constants.USERGROUP_default.ToString();
             row["ban"] = "";
             row["moreInfoJson"] = "";
@@ -239,7 +282,6 @@ namespace LightStart_BBS_server
             }
 
             user.Add("available", "false"); // 没有获取到时
-
             return user;
         }
 
@@ -588,7 +630,7 @@ namespace LightStart_BBS_server
 
                 if (err == "")
                 {
-                    string token = Form1.regUser(userInfoJson["id"].ToString(), userInfoJson["name"].ToString(), userInfoJson["password"].ToString(), userInfoJson["salt"].ToString(), userInfoJson["sharedKey"].ToString());
+                    string token = Form1.regUser(userInfoJson["id"].ToString(), userInfoJson["name"].ToString().Replace(" ",""), userInfoJson["password"].ToString(), userInfoJson["salt"].ToString(), userInfoJson["sharedKey"].ToString());
                     result = new Message(MESSAGE_RETURN_TOKEN, true, token, "server").toJsonString();
 
                     Form1.log(">> 用户 " + userInfoJson["id"].ToString() + " 注册: " + userInfoJson.ToString());
@@ -660,7 +702,10 @@ namespace LightStart_BBS_server
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
-                return_value[1] = user["id"];
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
                 return return_value;
             }
 
@@ -802,8 +847,8 @@ namespace LightStart_BBS_server
 
         private void userGroupChange_Click(object sender, EventArgs e)
         {
-            userGroupManager userGroupManager_ = new userGroupManager(); // 创建clientMsgboxSetting的实例
-            userGroupManager_.ShowDialog(); // 以模态窗口的方式显示clientMsgboxSetting窗体        
+            userManager userManager_ = new userManager(); // 创建clientMsgboxSetting的实例
+            userManager_.ShowDialog(); // 以模态窗口的方式显示clientMsgboxSetting窗体        
         }
     }
 }
