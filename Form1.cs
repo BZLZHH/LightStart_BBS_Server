@@ -208,7 +208,7 @@ namespace LightStart_BBS_server
             string appendText = "";
             if (time)
                 appendText = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "]";
-            appendText = text + "\r\n";
+            appendText += text + "\r\n";
             if (saveToFile)
                 AppendToFile(logFileName, appendText);
             LogBox.AppendText(appendText);
