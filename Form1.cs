@@ -15,12 +15,19 @@ namespace LightStart_BBS_server
 
         Server server = new Server();
         public static SQLiteManager manager_user;
+        public static SQLiteManager manager_forum;
         public static TextBox LogBox;
+
+        public static string logFileName = "";
 
         public Form1()
         {
 
             InitializeComponent();
+            DateTime now = DateTime.Now;
+            string formattedDate = now.ToString("yyyy.MM.dd-HH_mm");
+            logFileName = "LSBBS_LOG_" + formattedDate + ".log";
+
             LogBox = Log;
             CheckForIllegalCrossThreadCalls = false;
             // 替换为你的SQLite数据库文件路径和表名
@@ -28,15 +35,31 @@ namespace LightStart_BBS_server
             string tableName = "BBS_server_user";
             manager_user = new SQLiteManager(filePath, tableName);
             // 创建SQLiteManager实例并连接数据库
+            string filePath_forum = "./server_forum.db";
+            string tableName_forum = "BBS_server_forum";
+            manager_forum = new SQLiteManager(filePath_forum, tableName_forum);
 
-            bool had = false;
+            bool user_db_availabe = false;
             try
-            { manager_user.SelectAll(); had = true; }
+            { 
+                manager_user.SelectAll();
+                user_db_availabe = true; 
+            }
             catch
             {
-                had = false;
+                user_db_availabe = false;
             }
-            if (!had)
+            bool forum_db_availabe = false;
+            try
+            {
+                manager_forum.SelectAll();
+                forum_db_availabe = true;
+            }
+            catch
+            {
+                forum_db_availabe = false;
+            }
+            if (!user_db_availabe)
             {
                 // 创建一个名为"users"的表
                 Dictionary<string, string> columns = new Dictionary<string, string>();
@@ -50,14 +73,58 @@ namespace LightStart_BBS_server
                 columns["ban"] = "TEXT";
                 columns["moreInfoJson"] = "TEXT";
                 manager_user.CreateTable(tableName, columns);
-                log("创建表格\r\n");
+                log("创建 BBS_server_user 表格\r\n");
+            }
+
+            if (!forum_db_availabe)
+            {
+                Dictionary<string, string> columns = new Dictionary<string, string>();
+                columns["type"] = "TEXT"; //类型,1-分区,2-帖子
+                //下为公共
+                columns["id"] = "TEXT"; //帖子or分区ID,整数,帖子倒序,分区正序
+                //下为分区
+                columns["boardName"] = "TEXT"; //名称多语言,json保存(zh与en)
+                //下为帖子
+                columns["forumgroup"] = "TEXT"; //使用ID对应分类
+                columns["poster"] = "TEXT"; //使用userID对应用户
+                columns["title"] = "TEXT";
+                columns["likes"] = "TEXT"; //数组
+                columns["topics"] = "TEXT"; //使用json保存,[{"poster":"_userid_","text":"_text(markdown)_","likes":[_list_],"comments":[_id+text_]},...]
+                columns["text"] = "TEXT"; //markdown
+                columns["moreInfoJson"] = "TEXT";
+                manager_forum.CreateTable(tableName_forum, columns);
+                log("创建 BBS_server_forum 表格\r\n");
             }
 
             server.Start();
             log("服务器已开启\r\n");
         }
 
-        public static void changeUserID(string id_before, string id_after)
+        public static void CreateFile(string fileName, string textToWrite)
+        {
+            // 在程序运行目录下创建一个 Windows 文件
+            string filePath = Path.Combine(Environment.CurrentDirectory, fileName);
+
+            // 向文件中写入指定的文本内容，并保存
+            using (StreamWriter sw = File.CreateText(filePath))
+            {
+                sw.WriteLine(textToWrite);
+            }
+        }
+
+        public static void AppendToFile(string fileName, string textToAppend)
+        {
+            // 在程序运行目录下找到指定的文本文件
+            string filePath = Path.Combine(Environment.CurrentDirectory, fileName);
+
+            // 向文件中追加指定的文本内容，并保存
+            using (StreamWriter sw = File.AppendText(filePath))
+            {
+                sw.WriteLine(textToAppend);
+            }
+        }
+
+    public static void changeUserID(string id_before, string id_after)
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("id", id_after);
@@ -99,6 +166,22 @@ namespace LightStart_BBS_server
             manager_user.Update(row, condition);
         }
 
+        public static List<Dictionary<string,string>> getForumBoards()
+        {
+            string condition = "type='1'";
+            return manager_forum.SelectWhere(condition);
+        }
+
+        public static void addForumBoard(string title_json)
+        {
+            int id = getForumBoards().Count();
+            Dictionary<string, string> row = new Dictionary<string, string>();
+            row.Add("type", "1"); //分区固定
+            row.Add("id", id.ToString());
+            row.Add("boardName", title_json);
+            manager_forum.Insert(row);
+        }
+
         public static string ReadMsgConfigConfig()
         {
             const string jsonFilePath = "msgboxConfig.json"; // 文件路径
@@ -120,11 +203,15 @@ namespace LightStart_BBS_server
             return config.ToJsonString();
         }
 
-        public static void log(string text, bool time = true)
+        public static void log(string text, bool time = true, bool saveToFile = true)
         {
+            string appendText = "";
             if (time)
-                LogBox.AppendText("[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "]");
-            LogBox.AppendText(text + "\r\n");
+                appendText = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "]";
+            appendText = text + "\r\n";
+            if (saveToFile)
+                AppendToFile(logFileName, appendText);
+            LogBox.AppendText(appendText);
         }
 
         public static string RandomStr(
@@ -173,7 +260,11 @@ namespace LightStart_BBS_server
         public static string ChangeUserToken(string id)
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
-            string token = RandomStr(80);
+            string token = RandomStr(60);
+            while (getUserByToken(token)["available"] == "true")
+            {
+                token = RandomStr(80);
+            }
             row.Add("token", token);
             string condition = "id='" + id + "'";
             manager_user.Update(row, condition);
@@ -188,7 +279,12 @@ namespace LightStart_BBS_server
             row["password"] = password;
             row["salt"] = salt;
             row["sharedKey"] = sharedKey;
-            row["token"] = RandomStr(80);
+            string token = RandomStr(60);
+            while (getUserByToken(token)["available"] == "true")
+            {
+                token = RandomStr(80);
+            }
+            row["token"] = token;
             row["usergroup"] = Constants.USERGROUP_default.ToString();
             row["ban"] = "";
             row["moreInfoJson"] = "";
@@ -311,13 +407,13 @@ namespace LightStart_BBS_server
         private void GetUsersInfo_Click(object sender, EventArgs e)
         {
             List<Dictionary<string, string>> data = manager_user.SelectAll();
-            log("==============================\n", false);
+            log("==============================\n", false, false);
             ;            // 输出表格数据
             foreach (var item in data)
             {
-                log(string.Join("\r\n", item.Values) + "\r\n\r\n", false);
+                log(string.Join("\r\n", item.Values) + "\r\n\r\n", false, false);
             }
-            log("==============================\n", false);
+            log("==============================\n", false, false);
         }
 
         private void clientMsgboxChange_Click(object sender, EventArgs e)
@@ -330,10 +426,11 @@ namespace LightStart_BBS_server
         {
             public const int version = 2;
 
-            public static readonly string[] USERGROUPS = {"default","vip","admin"}; // 顺序要与下面一致
+            public static readonly string[] USERGROUPS = {"default","vip","admin","vip-"}; // 顺序要与下面一致
             public const int USERGROUP_default = 0;
             public const int USERGROUP_vip = 1;
             public const int USERGROUP_admin = 2;
+            public const int USERGROUP_vip_low = 3;
         }; 
 
         public class SQLiteManager
@@ -559,11 +656,15 @@ namespace LightStart_BBS_server
             public const short MESSAGE_RETURN_TOKEN = -1; // server  返回token
             public const short MESSAGE_GET_TOKEN_IDPW = 2; // user  id+pw获取token,登陆时用
             public const short MESSAGE_GET_TOKEN_AVAILABLE = 3; // user  检查token可用性
-                                                    // 论坛信息
+            // 论坛信息
             public const short MESSAGE_GET_USER_INFO = 3; // user  获取用户信息
             public const short MESSAGE_RETURN_USER_INFO = -3;// server  返回用户信息
-            public const short MESSAGE_GET_SECTIONS = 4;
-            public const short MESSAGE_RETURN_SECTIONS = -4;
+            public const short MESSAGE_GET_BOARDS = 4; // user 获取论坛分区
+            public const short MESSAGE_RETURN_BOARDS = -4; // server 返回论坛分区 (返回data为{"zh":[],"en":[]})
+            public const short MESSAGE_ADD_BOARD = 5; // user 添加论坛分区(仅admin)
+            public const short MESSAGE_RETURN_ADD_BOARD = -5; // server 返回添加论坛分区状态
+            public const short MESSAGE_GET_USER_INFO_PUBLIC = 6; // user 获取公开用户信息(使用ID)
+            public const short MESSAGE_RETURN_USER_INFO_PUBLIC = -6; // server 返回公开用户信息
 
             // 字符串型 (直接收到字符串)
             public const string MESSAGE_GET_ACTIVE = "active";
@@ -571,143 +672,6 @@ namespace LightStart_BBS_server
             // end
 
             private readonly Socket _client;
-
-            public bool CheckIDValidity(string str)
-            {
-                Regex regex = new Regex("^[a-zA-Z0-9_]*$");
-                return !regex.IsMatch(str) && str.Length >= 2 && str.Length <= 40;
-            }
-            public bool CheckNameValidity(string str)
-            {
-                Regex regex = new Regex(@"^[^\p{C}]+$");
-                return !regex.IsMatch(str) && str.Length >= 2 && str.Length <= 36;
-            }
-
-            public Connection(Socket client)
-            {
-                _client = client;
-            }
-
-            public string Action_Reg(Message message)
-            {
-                string result = "";
-                JObject userInfoJson = JObject.Parse(message.data);
-                JObject sendedJson = message.toJson();
-                string err = "";
-                bool return_old_verison = true;
-                if (!Form1.checkIDAvailable(userInfoJson["id"].ToString()))
-                {
-                    err = "不是一个可用的ID";
-                }
-                if (userInfoJson["sharedKey"].ToString() != "LightStart_Sssss")
-                //if (!true)
-                {
-                    err = "不是一个可用的邀请码";
-                }
-                if (CheckIDValidity(userInfoJson["id"].ToString()))
-                {
-                    err = "不是一个规范的唯一标识符\n唯一标识符要求如下:\n1.唯一标识符必须大于2个字符且小于40个字符\n2.唯一标识符只允许包含字母、数字及下划线";
-                }
-
-                if (CheckNameValidity(userInfoJson["name"].ToString()))
-                {
-                    err = "不是一个规范的名称\n名称要求如下:\n1.名称必须大于2个字符且小于36个字符\n2.名称不允许包含控制字符(如换行等)";
-                }
-
-                try
-                {
-                    if (int.Parse(sendedJson["version"].ToString()) < 1)
-                    {
-                        err = "您的轻启嫩谈版本过低,请更新至最新版本";
-                    }
-                }
-                catch
-                {
-                    return_old_verison = false;
-                    err = "The LightStart BBS version you are using is not supported. Please updata to the newest version available."; // 不提供version的版本不支持utf-8,使用ascii
-                }
-
-
-                if (err == "")
-                {
-                    string token = Form1.regUser(userInfoJson["id"].ToString(), userInfoJson["name"].ToString().Replace(" ",""), userInfoJson["password"].ToString(), userInfoJson["salt"].ToString(), userInfoJson["sharedKey"].ToString());
-                    result = new Message(MESSAGE_RETURN_TOKEN, true, token, "server").toJsonString();
-
-                    Form1.log(">> 用户 " + userInfoJson["id"].ToString() + " 注册: " + userInfoJson.ToString());
-                }
-                else
-                {
-                    result = new Message(MESSAGE_RETURN_TOKEN, false, "ERROR: " + err, "server", return_old_verison).toJsonString();
-                }
-                return result;
-            }
-
-            public string Action_Login(Message message)
-            {
-                string result = "";
-                JObject userInfoJson = JObject.Parse(message.data);
-                JObject sendedJson = message.toJson();
-                Dictionary<string, string> user = Form1.getUserByIDPW(userInfoJson["id"].ToString(), userInfoJson["password"].ToString());
-                string err = "";
-                bool return_old_verison = true;
-
-                if (user["available"].ToString() != "true")
-                {
-                    err = "错误的唯一标识符或密码";
-                }
-
-                try
-                {
-                    if (int.Parse(sendedJson["version"].ToString()) < 1)
-                    {
-                        err = "您的轻启嫩谈版本过低,请更新至最新版本";
-                    }
-                }
-                catch
-                {
-                    return_old_verison = false;
-                    err = "The LightStart BBS version you are using is not supported. Please updata to the newest version available."; // 不提供version的版本不支持utf-8,使用ascii
-                }
-
-                if (err == "")
-                {
-                    Form1.ChangeUserToken(userInfoJson["id"].ToString());
-                    user = Form1.getUserByIDPW(userInfoJson["id"].ToString(), userInfoJson["password"].ToString());
-                    result = new Message(MESSAGE_RETURN_TOKEN, true, user["token"], "server").toJsonString();
-
-                    Form1.log(">> 用户 " + userInfoJson["id"].ToString() + " 登录: " + userInfoJson.ToString());
-                }
-                else
-                {
-                    result = new Message(MESSAGE_RETURN_TOKEN, false, "ERROR: " + err, "server", return_old_verison).toJsonString();
-                }
-                return result;
-            }
-
-            public string[] Action_GetUserInfo(Message message) //返回需返回的message及id 
-            {
-                string result = "";
-                Dictionary<string, string> user = Form1.getUserByToken(message.token);
-                if (user["available"] == "true")
-                {
-                    JObject userInfo = new JObject();
-                    userInfo.Add("id", user["id"]);
-                    userInfo.Add("name", user["name"]);
-                    userInfo.Add("sharedKey", user["sharedKey"]);
-                    result = new Message(MESSAGE_RETURN_USER_INFO, true, userInfo.ToString(), "server").toJsonString();
-                }
-                else
-                {
-                    result = new Message(MESSAGE_RETURN_USER_INFO, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
-                }
-                string[] return_value = new string[2];
-                return_value[0] = result;
-                if (user["available"] == "true")
-                    return_value[1] = user["id"];
-                else
-                    return_value[1] = "Wrong Token";
-                return return_value;
-            }
 
             public void Process()
             {
@@ -786,6 +750,22 @@ namespace LightStart_BBS_server
                                                 sendData(return_msg);
                                                 break;
                                             }
+                                        case MESSAGE_GET_BOARDS:
+                                            {
+                                                string[] strings = Action_GetSortedBoards(message);
+                                                return_msg = strings[0];
+                                                id = strings[1];
+                                                sendData(return_msg);
+                                                break;
+                                            }
+                                        case MESSAGE_ADD_BOARD:
+                                            {
+                                                string[] strings = Action_AddBoard(message);
+                                                return_msg = strings[0];
+                                                id = strings[1];
+                                                sendData(return_msg);
+                                                break;
+                                            }
                                     }
                                     if (id != "")
                                     {
@@ -816,6 +796,206 @@ namespace LightStart_BBS_server
                 {
                     _client.Close();
                 }
+            }
+
+            public bool CheckIDValidity(string str)
+            {
+                Regex regex = new Regex("^[a-zA-Z0-9_]*$");
+                return !regex.IsMatch(str) && str.Length >= 2 && str.Length <= 40;
+            }
+            public bool CheckNameValidity(string str)
+            {
+                Regex regex = new Regex(@"^[^\p{C}]+$");
+                return !regex.IsMatch(str) && str.Length >= 2 && str.Length <= 36;
+            }
+
+            public Connection(Socket client)
+            {
+                _client = client;
+            }
+
+            public string[] Action_AddBoard(Message message)
+            {
+                string result = "";
+                Dictionary<string, string> user = Form1.getUserByToken(message.token);
+                if (user["available"] == "true")
+                {
+                    if (int.Parse(user["usergroup"]) == Constants.USERGROUP_admin)
+                    {
+                        Form1.addForumBoard(message.data);
+                        result = new Message(MESSAGE_RETURN_ADD_BOARD, true, "", "server").toJsonString();
+                    }
+                    else
+                    {
+                        result = new Message(MESSAGE_RETURN_ADD_BOARD, false, "ERROR: 你没有权限执行此操作", "server").toJsonString();
+                    }
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_ADD_BOARD, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                }
+                string[] return_value = new string[2];
+                return_value[0] = result;
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
+                return return_value;
+            }
+
+            public string[] Action_GetSortedBoards(Message message)
+            {
+                string result = "";
+                Dictionary<string, string> user = Form1.getUserByToken(message.token);
+                if (user["available"] == "true")
+                {
+                    JObject json = new JObject();
+                    JArray textZH = new JArray();
+                    JArray textEN = new JArray();
+                    List<Dictionary<string, string>> list = Form1.getForumBoards();
+                    List<Dictionary<string, string>> sortedList = list.OrderBy(dict => int.Parse(dict["id"])).ToList();
+                    foreach(Dictionary<string,string> key in sortedList)
+                    {
+                        textZH.Add(JObject.Parse(key["boardName"])["zh"].ToString());
+                        textEN.Add(JObject.Parse(key["boardName"])["en"].ToString());
+                    }
+                    json.Add("zh",textZH);
+                    json.Add("en",textEN);
+                    result = new Message(MESSAGE_RETURN_BOARDS, true, json.ToString(), "server").toJsonString();
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_BOARDS, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                }
+                string[] return_value = new string[2];
+                return_value[0] = result;
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
+                return return_value;
+            }
+
+            public string Action_Reg(Message message)
+            {
+                string result = "";
+                JObject userInfoJson = JObject.Parse(message.data);
+                JObject sendedJson = message.toJson();
+                string err = "";
+                bool return_old_verison = true;
+                if (!Form1.checkIDAvailable(userInfoJson["id"].ToString()))
+                {
+                    err = "不是一个可用的ID";
+                }
+                if (userInfoJson["sharedKey"].ToString() != "LightStart_Sssss")
+                //if (!true)
+                {
+                    err = "不是一个可用的邀请码";
+                }
+                if (CheckIDValidity(userInfoJson["id"].ToString()))
+                {
+                    err = "不是一个规范的唯一标识符\n唯一标识符要求如下:\n1.唯一标识符必须大于2个字符且小于40个字符\n2.唯一标识符只允许包含字母、数字及下划线";
+                }
+
+                if (CheckNameValidity(userInfoJson["name"].ToString()))
+                {
+                    err = "不是一个规范的名称\n名称要求如下:\n1.名称必须大于2个字符且小于36个字符\n2.名称不允许包含控制字符(如换行等)";
+                }
+
+                try
+                {
+                    if (int.Parse(sendedJson["version"].ToString()) < 1)
+                    {
+                        err = "您的轻启嫩谈版本过低,请更新至最新版本";
+                    }
+                }
+                catch
+                {
+                    return_old_verison = false;
+                    err = "The LightStart BBS version you are using is not supported. Please updata to the newest version available."; // 不提供version的版本不支持utf-8,使用ascii
+                }
+
+
+                if (err == "")
+                {
+                    string token = Form1.regUser(userInfoJson["id"].ToString(), userInfoJson["name"].ToString().Replace(" ", ""), userInfoJson["password"].ToString(), userInfoJson["salt"].ToString(), userInfoJson["sharedKey"].ToString());
+                    result = new Message(MESSAGE_RETURN_TOKEN, true, token, "server").toJsonString();
+
+                    Form1.log(">> 用户 " + userInfoJson["id"].ToString() + " 注册: " + userInfoJson.ToString());
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_TOKEN, false, "ERROR: " + err, "server", return_old_verison).toJsonString();
+                }
+                return result;
+            }
+
+            public string Action_Login(Message message)
+            {
+                string result = "";
+                JObject userInfoJson = JObject.Parse(message.data);
+                JObject sendedJson = message.toJson();
+                Dictionary<string, string> user = Form1.getUserByIDPW(userInfoJson["id"].ToString(), userInfoJson["password"].ToString());
+                string err = "";
+                bool return_old_verison = true;
+
+                if (user["available"].ToString() != "true")
+                {
+                    err = "错误的唯一标识符或密码";
+                }
+
+                try
+                {
+                    if (int.Parse(sendedJson["version"].ToString()) < 1)
+                    {
+                        err = "您的轻启嫩谈版本过低,请更新至最新版本";
+                    }
+                }
+                catch
+                {
+                    return_old_verison = false;
+                    err = "The LightStart BBS version you are using is not supported. Please updata to the newest version available."; // 不提供version的版本不支持utf-8,使用ascii
+                }
+
+                if (err == "")
+                {
+                    Form1.ChangeUserToken(userInfoJson["id"].ToString());
+                    user = Form1.getUserByIDPW(userInfoJson["id"].ToString(), userInfoJson["password"].ToString());
+                    result = new Message(MESSAGE_RETURN_TOKEN, true, user["token"], "server").toJsonString();
+
+                    Form1.log(">> 用户 " + userInfoJson["id"].ToString() + " 登录: " + userInfoJson.ToString());
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_TOKEN, false, "ERROR: " + err, "server", return_old_verison).toJsonString();
+                }
+                return result;
+            }
+
+            public string[] Action_GetUserInfo(Message message) //返回需返回的message([0])及id([1]) 
+            {
+                string result = "";
+                Dictionary<string, string> user = Form1.getUserByToken(message.token);
+                if (user["available"] == "true")
+                {
+                    JObject userInfo = new JObject();
+                    userInfo.Add("id", user["id"]);
+                    userInfo.Add("name", user["name"]);
+                    userInfo.Add("sharedKey", user["sharedKey"]);
+                    userInfo.Add("usergroup", user["usergroup"]);
+                    result = new Message(MESSAGE_RETURN_USER_INFO, true, userInfo.ToString(), "server").toJsonString();
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_USER_INFO, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                }
+                string[] return_value = new string[2];
+                return_value[0] = result;
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
+                return return_value;
             }
 
             public void sendData(string data)
