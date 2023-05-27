@@ -7,6 +7,7 @@ using System.Data.SQLite;
 using XSystem.Security.Cryptography;
 using XAct;
 using System.Text.RegularExpressions;
+using System.Windows.Forms.VisualStyles;
 
 namespace LightStart_BBS_server
 {
@@ -292,6 +293,31 @@ namespace LightStart_BBS_server
             return row["token"];
         }
 
+        public static void addPost(JObject postInfo) //json需包含forumgroup poster title text
+        {
+            Dictionary<string, string> row = new Dictionary<string, string>();
+            row["type"] = "2"; //固定type=2
+            row["id"] = getEveryPost().Count().ToString();
+            row["forumgroup"] = postInfo["forumgroup"].ToString();
+            row["poster"] = postInfo["poster"].ToString();
+            row["title"] = postInfo["title"].ToString();
+            row["text"] = postInfo["text"].ToString();
+            row["likes"] = "[]";
+            row["topics"] = "[]";
+            row["moreInfoJson"] = "";
+            manager_forum.Insert(row);
+        }
+
+        public static Dictionary<string,string> getPost(string id)
+        {
+            return manager_forum.SelectWhere($"type='2' AND id='{id}'")[0];
+        }
+
+        public static List<Dictionary<string,string>> getEveryPost()
+        {
+            return manager_forum.SelectWhere("id='2'");
+        }
+
         void restartServer()
         {
             /*
@@ -327,6 +353,12 @@ namespace LightStart_BBS_server
                 }
             }
             return result;
+        }
+
+        public static List<Dictionary<string,string>> getPostsByGroup(string group)
+        {
+            string condition = $"type='2' AND forumgroup='{group}'";
+            return manager_user.SelectWhere(condition);
         }
 
         public static Dictionary<string, string> getUserByIDPW(string id, string pw)
@@ -665,6 +697,12 @@ namespace LightStart_BBS_server
             public const short MESSAGE_RETURN_ADD_BOARD = -5; // server 返回添加论坛分区状态
             public const short MESSAGE_GET_USER_INFO_PUBLIC = 6; // user 获取公开用户信息(使用ID)
             public const short MESSAGE_RETURN_USER_INFO_PUBLIC = -6; // server 返回公开用户信息
+            public const short MESSAGE_GET_ALL_POSTS = 7; // user 获取所有帖子(根据分区)
+            public const short MESSAGE_RETURN_ALL_POSTS = -7; // user 返回所有帖子(只返回id title poster likes)
+            public const short MESSAGE_ADD_POST = 8; // user 发送帖子
+            public const short MESSAGE_RETURN_ADD_POST = -8; // server 返回发送帖子状态
+            public const short MESSAGE_GET_POST = 9; // user 获取帖子(使用ID)
+            public const short MESSAGE_RETURN_POST = -9; // server 返回帖子
 
             // 字符串型 (直接收到字符串)
             public const string MESSAGE_GET_ACTIVE = "active";
@@ -719,7 +757,18 @@ namespace LightStart_BBS_server
                                 string return_msg = "";
                                 if (message.token == "null") //无token操作
                                 {
-                                    Form1.log("收到 无token 信息: \n" + receivedData);
+                                    if (message.type != MESSAGE_GET_TOKEN_IDPW)
+                                        Form1.log("收到 无token 信息: \n" + receivedData);
+                                    else //去除密码
+                                    {
+                                        JObject data = JObject.Parse(message.data);
+                                        string password = data["password"].ToString();
+                                        data["password"] = "***";
+                                        message.data = data.ToString();
+                                        Form1.log("收到 无token 信息: \n" + message.toJsonString());
+                                        data["password"] = password;
+                                        message.data=data.ToString();
+                                    }
                                     switch (message.type)
                                     {
                                         case MESSAGE_ACTION_REG: //注册
@@ -766,16 +815,48 @@ namespace LightStart_BBS_server
                                                 sendData(return_msg);
                                                 break;
                                             }
+                                        case MESSAGE_GET_USER_INFO_PUBLIC:
+                                            {
+                                                string[] strings = Action_GetPublicUserInfo(message);
+                                                return_msg = strings[0];
+                                                id = strings[1];
+                                                sendData(return_msg);
+                                                break;
+                                            }
+                                        case MESSAGE_GET_ALL_POSTS:
+                                            {
+                                                string[] strings = Action_GetPostsByGroup(message);
+                                                return_msg = strings[0];
+                                                id = strings[1];
+                                                sendData(return_msg);
+                                                break;
+                                            }
+                                        case MESSAGE_ADD_POST:
+                                            {
+                                                string[] strings = Action_AddPost(message);
+                                                return_msg = strings[0];
+                                                id = strings[1];
+                                                sendData(return_msg);
+                                                break;
+                                            }
+                                        case MESSAGE_GET_POST:
+                                            {
+                                                string[] strings = Action_GetPost(message);
+                                                return_msg = strings[0];
+                                                id = strings[1];
+                                                sendData(return_msg);
+                                                break;
+                                            }
                                     }
                                     if (id != "")
                                     {
-                                        Form1.log("收到 " + id + " 信息: \n" + receivedData);
-                                        Form1.log("返回 " + id + " 信息: \n" + return_msg);
+                                        Form1.log($"收到 {id} 信息: \n{receivedData}");
+                                        Form1.log($"+并返回: \n{return_msg}");
                                     }
                                     else
                                     {
                                         Form1.log("收到 失效token用户 信息: \n" + receivedData);
-                                        Form1.log("返回 失效token用户 信息: \n" + return_msg);
+                                        Form1.log("+并返回: \n" + return_msg);
                                     }
                                 }
 
@@ -808,10 +889,152 @@ namespace LightStart_BBS_server
                 Regex regex = new Regex(@"^[^\p{C}]+$");
                 return !regex.IsMatch(str) && str.Length >= 2 && str.Length <= 36;
             }
+            public bool CheckPostValidity(string str)
+            {
+                Regex regex = new Regex(@"^[^\p{C}]+$");
+                return !regex.IsMatch(str.Replace(' ', char.MinValue));
+            }
 
             public Connection(Socket client)
             {
                 _client = client;
+            }
+
+            public string[] Action_GetPost(Message message)
+            {
+                string result = "";
+                Dictionary<string, string> user = Form1.getUserByToken(message.token);
+                if (user["available"] == "true")
+                {
+                    Dictionary<string, string> post = Form1.getPost(message.data);
+                    JObject postInfo = new JObject
+                    {
+                        { "id", post["id"] },
+                        { "forumgroup", post["forumgroup"] },
+                        { "title", post["title"] },
+                        { "likes", post["likes"] },
+                        { "topics", post["topics"] },
+                        { "text", post["text"] }
+                    };
+                    result = new Message(MESSAGE_RETURN_POST, true, postInfo.ToString(), "server").toJsonString();
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_POST, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                }
+                string[] return_value = new string[2];
+                return_value[0] = result;
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
+                return return_value;
+            }
+
+            public string[] Action_AddPost(Message message)
+            {
+                string result = "";
+                Dictionary<string, string> user = Form1.getUserByToken(message.token);
+                if (user["available"] == "true")
+                {
+                    //检查forumgroup poster title text
+                    JObject data = JObject.Parse(message.data);
+                    bool right = true;
+                    try 
+                    {
+                        data["forumgroup"].ToString();
+                        data["poster"].ToString();
+                        if (data["title"].ToString().Trim() == "" || data["text"].ToString().Trim() == "" || !CheckPostValidity(data["title"].ToString()) || !CheckPostValidity(data["text"].ToString()))
+                        {
+                            new JObject()["wuwuwu"].ToString(); //跳转至catch
+                        }
+                    }
+                    catch
+                    {
+                        result = new Message(MESSAGE_RETURN_ADD_POST, false, "ERROR: 提供的参数不符合要求", "server").toJsonString();
+                        right = false;
+                    }
+                    if(right)
+                    {
+                        Form1.addPost(data);
+                        result = new Message(MESSAGE_RETURN_ADD_POST, true, "", "server").toJsonString();
+                    }
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_ADD_POST, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                }
+                string[] return_value = new string[2];
+                return_value[0] = result;
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
+                return return_value;
+            }
+
+            public string[] Action_GetPostsByGroup(Message message)
+            {
+                string result = "";
+                Dictionary<string, string> user = Form1.getUserByToken(message.token);
+                if (user["available"] == "true")
+                {
+                    List<Dictionary<string, string>> list = Form1.getPostsByGroup(message.data);
+                    JArray array = new JArray();
+                    foreach (Dictionary<string, string> item in list)
+                    {
+                        JObject jObject = new JObject
+                        {
+                            {"id", item["id"]},
+                            {"title", item["title"]},
+                            {"poster", item["poster"]},
+                            {"likes", item["likes"]}
+                        };
+                        array.Add(jObject);
+                    }
+
+                    result = new Message(MESSAGE_RETURN_ALL_POSTS, true, array.ToString(), "server").toJsonString();
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_ALL_POSTS, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                }
+                string[] return_value = new string[2];
+                return_value[0] = result;
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
+                return return_value;
+            }
+
+            public string[] Action_GetPublicUserInfo(Message message)
+            {
+                string result = "";
+                Dictionary<string, string> user = Form1.getUserByToken(message.token);
+                if (user["available"] == "true")
+                {
+                    Dictionary<string, string> foundUser = Form1.getUserByIDPW(message.data, "");
+                    JObject userInfo = new JObject
+                    {
+                        { "id", foundUser["id"] },
+                        { "name", foundUser["name"] },
+                        { "sharedKey", foundUser["sharedKey"] },
+                        { "usergroup", foundUser["usergroup"] }
+                    };
+                    result = new Message(MESSAGE_RETURN_USER_INFO_PUBLIC, true, userInfo.ToString(), "server").toJsonString();
+                }
+                else
+                {
+                    result = new Message(MESSAGE_RETURN_USER_INFO_PUBLIC, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                }
+                string[] return_value = new string[2];
+                return_value[0] = result;
+                if (user["available"] == "true")
+                    return_value[1] = user["id"];
+                else
+                    return_value[1] = "Wrong Token";
+                return return_value;
             }
 
             public string[] Action_AddBoard(Message message)
@@ -978,11 +1201,13 @@ namespace LightStart_BBS_server
                 Dictionary<string, string> user = Form1.getUserByToken(message.token);
                 if (user["available"] == "true")
                 {
-                    JObject userInfo = new JObject();
-                    userInfo.Add("id", user["id"]);
-                    userInfo.Add("name", user["name"]);
-                    userInfo.Add("sharedKey", user["sharedKey"]);
-                    userInfo.Add("usergroup", user["usergroup"]);
+                    JObject userInfo = new JObject
+                    {
+                        { "id", user["id"] },
+                        { "name", user["name"] },
+                        { "sharedKey", user["sharedKey"] },
+                        { "usergroup", user["usergroup"] }
+                    };
                     result = new Message(MESSAGE_RETURN_USER_INFO, true, userInfo.ToString(), "server").toJsonString();
                 }
                 else
