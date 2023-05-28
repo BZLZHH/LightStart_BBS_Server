@@ -1186,6 +1186,7 @@ namespace LightStart_BBS_server
                     user = Form1.getUserByIDPW(userInfoJson["id"].ToString(), userInfoJson["password"].ToString());
                     result = new Message(MESSAGE_RETURN_TOKEN, true, user["token"], "server").toJsonString();
 
+                    userInfoJson["password"] = "***";
                     Form1.log(">> ÓÃ»§ " + userInfoJson["id"].ToString() + " µÇÂ¼: " + userInfoJson.ToString());
                 }
                 else
