@@ -8,6 +8,7 @@ using XSystem.Security.Cryptography;
 using XAct;
 using System.Text.RegularExpressions;
 using System.Windows.Forms.VisualStyles;
+using System.Collections.Generic;
 
 namespace LightStart_BBS_server
 {
@@ -129,27 +130,27 @@ namespace LightStart_BBS_server
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("id", id_after);
-            string condition = "id='" + id_before + "'";
+            string condition = "id='" + SQLiteManager.encrypt(id_before) + "'";
             manager_user.Update(row, condition);
         }
         public static void changeUserName(string id, string name_after)
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("name", name_after);
-            string condition = "id='" + id + "'";
+            string condition = "id='" + SQLiteManager.encrypt(id) + "'";
             manager_user.Update(row, condition);
         }
         public static void changeUserInvitationKey(string id, string invitationKey_after)
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("sharedKey", invitationKey_after);
-            string condition = "id='" + id + "'";
+            string condition = "id='" + SQLiteManager.encrypt(id) + "'";
             manager_user.Update(row, condition);
         }
 
         public static void deleteUser(string id)
         {
-            string condition = "id='" + id + "'";
+            string condition = "id='" + SQLiteManager.encrypt(id) + "'";
             manager_user.Delete(condition);
         }
 
@@ -163,19 +164,20 @@ namespace LightStart_BBS_server
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("usergroup", group.ToString());
-            string condition = "id='" + id + "'";
+            string condition = "id='" + SQLiteManager.encrypt(id) + "'";
             manager_user.Update(row, condition);
         }
 
         public static List<Dictionary<string,string>> getForumBoards()
         {
-            string condition = "type='1'";
+            string condition = "type='"+ SQLiteManager.encrypt("1")+"'";
             return manager_forum.SelectWhere(condition);
         }
 
         public static void addForumBoard(string title_json)
         {
-            int id = getForumBoards().Count();
+            List<Dictionary<string, string>> boards = getForumBoards();
+            int id = int.Parse(boards[boards.Count - 1]["id"]) + 1;
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("type", "1"); //分区固定
             row.Add("id", id.ToString());
@@ -267,7 +269,7 @@ namespace LightStart_BBS_server
                 token = RandomStr(80);
             }
             row.Add("token", token);
-            string condition = "id='" + id + "'";
+            string condition = "id='" + SQLiteManager.encrypt(id) + "'";
             manager_user.Update(row, condition);
             return token;
         }
@@ -297,7 +299,8 @@ namespace LightStart_BBS_server
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
             row["type"] = "2"; //固定type=2
-            row["id"] = getEveryPost().Count().ToString();
+            List<Dictionary<string, string>> posts = getEveryPost();
+            row["id"] = (int.Parse(posts[posts.Count - 1]["id"]) + 1).ToString();
             row["forumgroup"] = postInfo["forumgroup"].ToString();
             row["poster"] = postInfo["poster"].ToString();
             row["title"] = postInfo["title"].ToString();
@@ -310,12 +313,12 @@ namespace LightStart_BBS_server
 
         public static Dictionary<string,string> getPost(string id)
         {
-            return manager_forum.SelectWhere($"type='2' AND id='{id}'")[0];
+            return manager_forum.SelectWhere($"type='"+ SQLiteManager.encrypt("2")+"' AND id='"+ SQLiteManager.encrypt(id)+"'")[0];
         }
 
         public static List<Dictionary<string,string>> getEveryPost()
         {
-            return manager_forum.SelectWhere("id='2'");
+            return manager_forum.SelectWhere("id='"+ SQLiteManager.encrypt("2")+"'");
         }
 
         void restartServer()
@@ -342,74 +345,61 @@ namespace LightStart_BBS_server
 
         public static bool checkIDAvailable(string id)
         {
-            bool result = true;
-            List<Dictionary<string, string>> list = manager_user.SelectAll();
-            foreach (Dictionary<string, string> kvp in list)
+            List<Dictionary<string, string>> list = manager_user.SelectWhere("id='" + SQLiteManager.encrypt(id) + "'");
+            Dictionary<string, string> user = new Dictionary<string, string>();
+            bool idAvailable = false;
+            if (list.Count == 1)
             {
-                if (kvp["id"] == id)
-                {
-                    result = false;
-                    break;
-                }
+                idAvailable = false;
             }
-            return result;
+            else
+            {
+                idAvailable = true;
+            }
+            return idAvailable;
         }
 
         public static List<Dictionary<string,string>> getPostsByGroup(string group)
         {
-            string condition = $"type='2' AND forumgroup='{group}'";
+            string condition = $"type='"+ SQLiteManager.encrypt("2")+"' AND forumgroup='"+ SQLiteManager.encrypt(group) +"'";
             return manager_user.SelectWhere(condition);
         }
 
         public static Dictionary<string, string> getUserByIDPW(string id, string pw)
         {
-            List<Dictionary<string, string>> list = manager_user.SelectAll();
+            List<Dictionary<string, string>> list = manager_user.SelectWhere("id='" + SQLiteManager.encrypt(id) + "'");
             Dictionary<string, string> user = new Dictionary<string, string>();
             bool idAvailable = false;
-            foreach (Dictionary<string, string> kvp in list)
+            if (list.Count == 1)
             {
-                if (kvp["id"] == id)
-                {
-                    user = kvp;
-                    idAvailable = true;
-                    break;
-                }
-            }
-            if (idAvailable)
-            {
-
-                if (SHA256(SHA256(pw) + SHA256(user["salt"]) + SHA1(pw + user["salt"])) == user["password"])
-                {
-                    user.Add("available", "true");
-                }
-                else
-                {
-                    user.Add("available", "false");
-                }
+                user = list[0];
+                idAvailable = true;
             }
             else
             {
-                user.Add("available", "false");
+                idAvailable = false;
             }
-
+            user.Add("available", "false");
+            if (idAvailable && (SHA256(SHA256(pw) + SHA256(user["salt"]) + SHA1(pw + user["salt"])) == user["password"]))
+            {
+                user["available"] = "true";
+            }
             return user;
         }
 
         public static Dictionary<string, string> getUserByToken(string token)
         {
-            List<Dictionary<string, string>> list = manager_user.SelectAll();
+            List<Dictionary<string, string>> list = manager_user.SelectWhere("token='"+ SQLiteManager.encrypt(token) +"'");
             Dictionary<string, string> user = new Dictionary<string, string>();
-            foreach (Dictionary<string, string> kvp in list)
+            if (list.Count == 1)
             {
-                if (kvp["token"] == token)
-                {
-                    user = kvp;
-                    user.Add("available", "true");
-                    return user;
-                }
+                user = list[0];
+                user.Add("available", "true");
             }
-
-            user.Add("available", "false"); // 没有获取到时
+            else
+            {
+                user.Add("available", "false");
+            }
             return user;
         }
 
@@ -470,6 +460,7 @@ namespace LightStart_BBS_server
             private SQLiteConnection connection;
             private SQLiteCommand command;
             private string tableName;
+            private const string replaced_slash = "_";
 
             // 构造函数，连接数据库
             public SQLiteManager(string filePath, string tableName)
@@ -493,18 +484,62 @@ namespace LightStart_BBS_server
                 ExecuteNonQuery(query);
             }
 
+            public static string encrypt(string str)
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(str);
+                string encryptedData = Convert.ToBase64String(bytes);
+                encryptedData = encryptedData.Replace("/", replaced_slash);
+                return encryptedData;
+            } 
+
+            public static string decrypt(string str)
+            {
+                try
+                {
+                    byte[] bytes = Convert.FromBase64String(str.Replace(replaced_slash, "/"));
+                    string decryptedData = Encoding.UTF8.GetString(bytes);
+                    return decryptedData;
+                }
+                catch
+                {
+                    return str;
+                }
+            }
+
             // 查询表中的所有行
             public List<Dictionary<string, string>> SelectAll()
             {
                 string query = "SELECT * FROM " + tableName;
-                return ExecuteQuery(query);
+                List<Dictionary<string, string>> list = ExecuteQuery(query);
+                foreach(Dictionary<string,string> item in list)
+                {
+                    foreach (string key in item.Keys)
+                    {
+                        string value = item[key];
+                        value = decrypt(value);
+                        item[key] = value;
+                    }
+
+                }
+                return list;
             }
 
             // 查询符合条件的行
             public List<Dictionary<string, string>> SelectWhere(string condition)
             {
                 string query = "SELECT * FROM " + tableName + " WHERE " + condition;
-                return ExecuteQuery(query);
+                List<Dictionary<string, string>> list = ExecuteQuery(query);
+                foreach (Dictionary<string, string> item in list)
+                {
+                    foreach (string key in item.Keys)
+                    {
+                        string value = item[key];
+                        value = decrypt(value);
+                        item[key] = value;
+                    }
+
+                }
+                return list;
             }
 
             // 插入一行数据
@@ -515,7 +550,7 @@ namespace LightStart_BBS_server
                 foreach (string column in row.Keys)
                 {
                     columns += column + ",";
-                    values += "'" + row[column] + "',";
+                    values += "'" + encrypt(row[column]) + "',";
                 }
                 columns = columns.TrimEnd(',');
                 values = values.TrimEnd(',');
@@ -529,7 +564,7 @@ namespace LightStart_BBS_server
                 string setValues = "";
                 foreach (string column in row.Keys)
                 {
-                    setValues += column + "='" + row[column] + "',";
+                    setValues += column + "='" + encrypt(row[column]) + "',";
                 }
                 setValues = setValues.TrimEnd(',');
                 string query = "UPDATE " + tableName + " SET " + setValues + " WHERE " + condition;
@@ -889,10 +924,11 @@ namespace LightStart_BBS_server
                 Regex regex = new Regex(@"^[^\p{C}]+$");
                 return !regex.IsMatch(str) && str.Length >= 2 && str.Length <= 36;
             }
-            public bool CheckPostValidity(string str)
+
+            public bool CheckPostTitleValidity(string str)
             {
-                Regex regex = new Regex(@"^[^\p{C}]+$");
-                return !regex.IsMatch(str.Replace(' ', char.MinValue));
+                Regex regex = new Regex(@"\r|\n");
+                return !regex.IsMatch(str);
             }
 
             public Connection(Socket client)
@@ -944,20 +980,20 @@ namespace LightStart_BBS_server
                     {
                         data["forumgroup"].ToString();
                         data["poster"].ToString();
-                        if (data["title"].ToString().Trim() == "" || data["text"].ToString().Trim() == "" || !CheckPostValidity(data["title"].ToString()) || !CheckPostValidity(data["text"].ToString()))
+                        if (data["title"].ToString().Trim() == "" || data["text"].ToString().Trim() == "" || !CheckPostTitleValidity(data["title"].ToString()))
                         {
-                            new JObject()["wuwuwu"].ToString(); //跳转至catch
+                            right = false;
                         }
                     }
-                    catch
-                    {
-                        result = new Message(MESSAGE_RETURN_ADD_POST, false, "ERROR: 提供的参数不符合要求", "server").toJsonString();
-                        right = false;
-                    }
-                    if(right)
+                    catch { }
+                    if (right)
                     {
                         Form1.addPost(data);
                         result = new Message(MESSAGE_RETURN_ADD_POST, true, "", "server").toJsonString();
+                    }
+                    else
+                    {
+                        result = new Message(MESSAGE_RETURN_ADD_POST, false, "ERROR: 提供的参数不符合要求", "server").toJsonString();
                     }
                 }
                 else
