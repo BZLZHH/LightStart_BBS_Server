@@ -9,6 +9,7 @@ using XAct;
 using System.Text.RegularExpressions;
 using System.Windows.Forms.VisualStyles;
 using System.Collections.Generic;
+using System.Data;
 
 namespace LightStart_BBS_server
 {
@@ -177,7 +178,12 @@ namespace LightStart_BBS_server
         public static void addForumBoard(string title_json)
         {
             List<Dictionary<string, string>> boards = getForumBoards();
-            int id = int.Parse(boards[boards.Count - 1]["id"]) + 1;
+            int id = 0;
+            try
+            {
+                id = int.Parse(boards[boards.Count - 1]["id"]) + 1;
+            }
+            catch { }
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("type", "1"); //分区固定
             row.Add("id", id.ToString());
@@ -300,7 +306,13 @@ namespace LightStart_BBS_server
             Dictionary<string, string> row = new Dictionary<string, string>();
             row["type"] = "2"; //固定type=2
             List<Dictionary<string, string>> posts = getEveryPost();
-            row["id"] = (int.Parse(posts[posts.Count - 1]["id"]) + 1).ToString();
+            int id = 0;
+            try
+            {
+                id = int.Parse(posts[posts.Count - 1]["id"]) + 1;
+            }
+            catch { }
+            row["id"] = id.ToString();
             row["forumgroup"] = postInfo["forumgroup"].ToString();
             row["poster"] = postInfo["poster"].ToString();
             row["title"] = postInfo["title"].ToString();
@@ -318,7 +330,7 @@ namespace LightStart_BBS_server
 
         public static List<Dictionary<string,string>> getEveryPost()
         {
-            return manager_forum.SelectWhere("id='"+ SQLiteManager.encrypt("2")+"'");
+            return manager_forum.SelectWhere("type='"+ SQLiteManager.encrypt("2")+"'");
         }
 
         void restartServer()
@@ -362,7 +374,7 @@ namespace LightStart_BBS_server
         public static List<Dictionary<string,string>> getPostsByGroup(string group)
         {
             string condition = $"type='"+ SQLiteManager.encrypt("2")+"' AND forumgroup='"+ SQLiteManager.encrypt(group) +"'";
-            return manager_user.SelectWhere(condition);
+            return manager_forum.SelectWhere(condition);
         }
 
         public static Dictionary<string, string> getUserByIDPW(string id, string pw)
@@ -448,7 +460,7 @@ namespace LightStart_BBS_server
         {
             public const int version = 2;
 
-            public static readonly string[] USERGROUPS = {"default","vip","admin","vip-"}; // 顺序要与下面一致
+            public static readonly string[] USERGROUPS = {"default","vip","admin", "vip-" }; // 顺序要与下面一致
             public const int USERGROUP_default = 0;
             public const int USERGROUP_vip = 1;
             public const int USERGROUP_admin = 2;
@@ -462,7 +474,71 @@ namespace LightStart_BBS_server
             private string tableName;
             private const string replaced_slash = "_";
 
-            // 构造函数，连接数据库
+            public void updata_fromv2()
+            {
+                string selectQuery = "SELECT * FROM BBS_server_user";
+                using (SQLiteCommand selectCommand = new SQLiteCommand(selectQuery, connection))
+                {
+                    using (SQLiteDataReader reader = selectCommand.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            // 获取每个列的值
+                            string id = reader.GetString(0);
+                            string name = reader.GetString(1);
+                            string password = reader.GetString(2);
+                            string salt = reader.GetString(3);
+                            string sharedKey = reader.GetString(4);
+                            string token = reader.GetString(5);
+                            string usergroup = reader.GetString(6);
+                            string ban = reader.GetString(7);
+                            string moreInfoJson = reader.GetString(8);
+
+                            // 使用加密函数处理值
+                            string encryptedId = encrypt(id);
+                            string encryptedName = encrypt(name);
+                            string encryptedPassword = encrypt(password);
+                            string encryptedSalt = encrypt(salt);
+                            string encryptedSharedKey = encrypt(sharedKey);
+                            string encryptedToken = encrypt(token);
+                            string encryptedUsergroup = encrypt(usergroup);
+                            string encryptedBan = encrypt(ban);
+                            string encryptedMoreInfoJson = encrypt(moreInfoJson);
+
+                            // 更新或插入加密后的值到 SQLite
+                            using (SQLiteCommand updateCommand = new SQLiteCommand(connection))
+                            {
+                                updateCommand.CommandText = "UPDATE BBS_server_user SET " +
+                                    "id = @encryptedId, " +
+                                    "name = @encryptedName, " +
+                                    "password = @encryptedPassword, " +
+                                    "salt = @encryptedSalt, " +
+                                    "sharedKey = @encryptedSharedKey, " +
+                                    "token = @encryptedToken, " +
+                                    "usergroup = @encryptedUsergroup, " +
+                                    "ban = @encryptedBan, " +
+                                    "moreInfoJson = @encryptedMoreInfoJson " +
+                                    "WHERE id = @id";
+                                updateCommand.Parameters.AddWithValue("@encryptedId", encryptedId);
+                                updateCommand.Parameters.AddWithValue("@encryptedName", encryptedName);
+                                updateCommand.Parameters.AddWithValue("@encryptedPassword", encryptedPassword);
+                                updateCommand.Parameters.AddWithValue("@encryptedSalt", encryptedSalt);
+                                updateCommand.Parameters.AddWithValue("@encryptedSharedKey", encryptedSharedKey);
+                                updateCommand.Parameters.AddWithValue("@encryptedToken", encryptedToken);
+                                updateCommand.Parameters.AddWithValue("@encryptedUsergroup", encryptedUsergroup);
+                                updateCommand.Parameters.AddWithValue("@encryptedBan", encryptedBan);
+                                updateCommand.Parameters.AddWithValue("@encryptedMoreInfoJson", encryptedMoreInfoJson);
+                                updateCommand.Parameters.AddWithValue("@id", id);
+                                updateCommand.ExecuteNonQuery();
+                            }
+                        }
+                    }
+                }
+
+
+
+            }
+
             public SQLiteManager(string filePath, string tableName)
             {
                 this.tableName = tableName;
@@ -752,7 +828,7 @@ namespace LightStart_BBS_server
                 {
                     while (true)
                     {
-                        byte[] buffer = new byte[1024];
+                        byte[] buffer = new byte[16384];
                         int bytesReceived = _client.Receive(buffer);
 
                         if (bytesReceived == 0)
@@ -950,6 +1026,7 @@ namespace LightStart_BBS_server
                         { "title", post["title"] },
                         { "likes", post["likes"] },
                         { "topics", post["topics"] },
+                        { "poster", post["poster"] },
                         { "text", post["text"] }
                     };
                     result = new Message(MESSAGE_RETURN_POST, true, postInfo.ToString(), "server").toJsonString();
@@ -979,7 +1056,6 @@ namespace LightStart_BBS_server
                     try 
                     {
                         data["forumgroup"].ToString();
-                        data["poster"].ToString();
                         if (data["title"].ToString().Trim() == "" || data["text"].ToString().Trim() == "" || !CheckPostTitleValidity(data["title"].ToString()))
                         {
                             right = false;
@@ -988,6 +1064,7 @@ namespace LightStart_BBS_server
                     catch { }
                     if (right)
                     {
+                        data.Add("poster", user["id"]);
                         Form1.addPost(data);
                         result = new Message(MESSAGE_RETURN_ADD_POST, true, "", "server").toJsonString();
                     }
@@ -1050,6 +1127,7 @@ namespace LightStart_BBS_server
                 Dictionary<string, string> user = Form1.getUserByToken(message.token);
                 if (user["available"] == "true")
                 {
+                    log(message.data);
                     Dictionary<string, string> foundUser = Form1.getUserByIDPW(message.data, "");
                     JObject userInfo = new JObject
                     {
