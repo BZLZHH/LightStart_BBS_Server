@@ -1105,7 +1105,7 @@ namespace LightStart_BBS_server
                         };
                         array.Add(jObject);
                     }
-                    Array.Reverse(array) //反转
+                    Array.Reverse(array); //反转
                     result = new Message(MESSAGE_RETURN_ALL_POSTS, true, array.ToString(), "server").toJsonString();
                 }
                 else
