@@ -28,7 +28,7 @@ namespace LightStart_BBS_server
 
             InitializeComponent();
             DateTime now = DateTime.Now;
-            string formattedDate = now.ToString("yyyy.MM.dd-HH_mm");
+            string formattedDate = now.ToString("yyyy.MM.dd_HH_mm");
             logFileName = "LSBBS_LOG_" + formattedDate + ".log";
 
             LogBox = Log;
@@ -1105,7 +1105,7 @@ namespace LightStart_BBS_server
                         };
                         array.Add(jObject);
                     }
-
+                    Array.Reverse(array) //·´×ª
                     result = new Message(MESSAGE_RETURN_ALL_POSTS, true, array.ToString(), "server").toJsonString();
                 }
                 else
