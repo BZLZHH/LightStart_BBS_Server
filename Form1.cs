@@ -1093,6 +1093,7 @@ namespace LightStart_BBS_server
                 if (user["available"] == "true")
                 {
                     List<Dictionary<string, string>> list = Form1.getPostsByGroup(message.data);
+                    list.Reverse(); //反转
                     JArray array = new JArray();
                     foreach (Dictionary<string, string> item in list)
                     {
@@ -1105,7 +1106,6 @@ namespace LightStart_BBS_server
                         };
                         array.Add(jObject);
                     }
-                    Array.Reverse(array); //反转
                     result = new Message(MESSAGE_RETURN_ALL_POSTS, true, array.ToString(), "server").toJsonString();
                 }
                 else
