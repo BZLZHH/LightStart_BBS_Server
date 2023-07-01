@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms.VisualStyles;
 using System.Collections.Generic;
 using System.Data;
+using System.Text.Json.Nodes;
 
 namespace LightStart_BBS_server
 {
@@ -208,7 +209,7 @@ namespace LightStart_BBS_server
                 titleJson.Add("zh", zhText);
             if (enText != "")
                 titleJson.Add("en", enText);
-            row.Add("boardName", titleJson.ToString());
+            row.Add("boardName", titleJson.ToString(Formatting.None));
             string condition = $"type='{SQLiteManager.encrypt("1")}' AND id='{SQLiteManager.encrypt(id.ToString())}'";
             manager_forum.Update(row, condition);
         }
@@ -405,10 +406,10 @@ namespace LightStart_BBS_server
             }
             catch { }
             row["id"] = id.ToString();
-            row["forumgroup"] = postInfo["forumgroup"].ToString();
-            row["poster"] = postInfo["poster"].ToString();
-            row["title"] = postInfo["title"].ToString();
-            row["text"] = postInfo["text"].ToString();
+            row["forumgroup"] = postInfo["forumgroup"].ToString(Formatting.None);
+            row["poster"] = postInfo["poster"].ToString(Formatting.None);
+            row["title"] = postInfo["title"].ToString(Formatting.None);
+            row["text"] = postInfo["text"].ToString(Formatting.None);
             row["likes"] = "[]";
             row["topics"] = "[]";
             row["moreInfoJson"] = "";
@@ -815,7 +816,7 @@ namespace LightStart_BBS_server
                     {
                         Socket client = _listener.Accept();
 
-                        //("Client connected from " + client.RemoteEndPoint.ToString());
+                        //("Client connected from " + client.RemoteEndPoint.ToString(Formatting.None));
 
                         Connection connection = new Connection(client);
                         Thread thread = new Thread(connection.Process);
@@ -858,11 +859,13 @@ namespace LightStart_BBS_server
 
             public JObject toJson()
             {
-                JObject result = new JObject();
-                result.Add("type", this.type);
-                result.Add("state", this.state);
-                result.Add("data", this.data);
-                result.Add("token", this.token);
+                JObject result = new JObject
+                {
+                    { "type", this.type },
+                    { "state", this.state },
+                    { "data", this.data },
+                    { "token", this.token }
+                };
                 if (version != -1) // version为-1时,表示用户使用的软件版本过低,不支持接受json中的version,所以不添加version
                 {
                     result.Add("version", this.version);
@@ -877,7 +880,7 @@ namespace LightStart_BBS_server
                 {
                     startText = "oldVersion";
                 }
-                return startText + this.toJson().ToString();
+                return startText + this.toJson().ToString(Formatting.None);
             }
         }
 
@@ -923,7 +926,7 @@ namespace LightStart_BBS_server
                 {
                     while (true)
                     {
-                        byte[] buffer = new byte[16384];
+                        byte[] buffer = new byte[262144];
                         int bytesReceived = _client.Receive(buffer);
 
                         if (bytesReceived == 0)
@@ -968,12 +971,12 @@ namespace LightStart_BBS_server
                                     else //去除密码
                                     {
                                         JObject data = JObject.Parse(message.data);
-                                        string password = data["password"].ToString();
+                                        string password = data["password"].ToString(Formatting.None);
                                         data["password"] = "***";
-                                        message.data = data.ToString();
+                                        message.data = data.ToString(Formatting.None);
                                         Form1.log("收到 无token 信息: \n" + message.toJsonString());
                                         data["password"] = password;
-                                        message.data = data.ToString();
+                                        message.data = data.ToString(Formatting.None);
                                     }
                                     switch (message.type)
                                     {
@@ -1077,7 +1080,7 @@ namespace LightStart_BBS_server
                 }
                 catch (Exception ex)
                 {
-                    //(ex.ToString());
+                    //(ex.ToString(Formatting.None));
                 }
                 finally
                 {
@@ -1124,7 +1127,7 @@ namespace LightStart_BBS_server
                         { "poster", post["poster"] },
                         { "text", post["text"] }
                     };
-                    result = new Message(MESSAGE_RETURN_POST, true, postInfo.ToString(), "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_POST, true, postInfo.ToString(Formatting.None), "server").toJsonString();
                 }
                 else
                 {
@@ -1150,8 +1153,8 @@ namespace LightStart_BBS_server
                     bool right = true;
                     try
                     {
-                        data["forumgroup"].ToString();
-                        if (data["title"].ToString().Trim() == "" || data["text"].ToString().Trim() == "" || !CheckPostTitleValidity(data["title"].ToString()))
+                        data["forumgroup"].ToString(Formatting.None);
+                        if (data["title"].ToString(Formatting.None).Trim() == "" || data["text"].ToString(Formatting.None).Trim() == "" || !CheckPostTitleValidity(data["title"].ToString(Formatting.None)))
                         {
                             right = false;
                         }
@@ -1201,7 +1204,7 @@ namespace LightStart_BBS_server
                         };
                         array.Add(jObject);
                     }
-                    result = new Message(MESSAGE_RETURN_ALL_POSTS, true, array.ToString(), "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_ALL_POSTS, true, array.ToString(Formatting.None), "server").toJsonString();
                 }
                 else
                 {
@@ -1231,7 +1234,7 @@ namespace LightStart_BBS_server
                         { "sharedKey", foundUser["sharedKey"] },
                         { "usergroup", foundUser["usergroup"] }
                     };
-                    result = new Message(MESSAGE_RETURN_USER_INFO_PUBLIC, true, userInfo.ToString(), "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_USER_INFO_PUBLIC, true, userInfo.ToString(Formatting.None), "server").toJsonString();
                 }
                 else
                 {
@@ -1293,14 +1296,14 @@ namespace LightStart_BBS_server
                         {
                             JObject titles = JObject.Parse(i["boardName"]);
                             JObject tmp = new JObject
-                        {
-                            { "id", i["id"] },
-                            { "title_zh", titles["zh"].ToString() },
-                            { "title_en", titles["en"].ToString() },
-                        };
+                            {
+                                { "id", i["id"] },
+                                { "title_zh", titles["zh"].ToString() },
+                                { "title_en", titles["en"].ToString() },
+                            };
                             json.Add(tmp);
                         }
-                        result = new Message(MESSAGE_RETURN_BOARDS, true, json.ToString(), "server").toJsonString();
+                        result = new Message(MESSAGE_RETURN_BOARDS, true, json.ToString(Formatting.None), "server").toJsonString();
                     }
                 }
                 else
@@ -1323,28 +1326,28 @@ namespace LightStart_BBS_server
                 JObject sendedJson = message.toJson();
                 string err = "";
                 bool return_old_verison = true;
-                if (!Form1.checkIDAvailable(userInfoJson["id"].ToString()))
+                if (!Form1.checkIDAvailable(userInfoJson["id"].ToString(Formatting.None)))
                 {
                     err = "不是一个可用的ID";
                 }
-                if (userInfoJson["sharedKey"].ToString() != "LightStart_Sssss")
+                if (userInfoJson["sharedKey"].ToString(Formatting.None) != "LightStart_Sssss")
                 //if (!true)
                 {
                     err = "不是一个可用的邀请码";
                 }
-                if (CheckIDValidity(userInfoJson["id"].ToString()))
+                if (CheckIDValidity(userInfoJson["id"].ToString(Formatting.None)))
                 {
                     err = "不是一个规范的唯一标识符\n唯一标识符要求如下:\n1.唯一标识符必须大于2个字符且小于40个字符\n2.唯一标识符只允许包含字母、数字及下划线";
                 }
 
-                if (CheckNameValidity(userInfoJson["name"].ToString()))
+                if (CheckNameValidity(userInfoJson["name"].ToString(Formatting.None)))
                 {
                     err = "不是一个规范的名称\n名称要求如下:\n1.名称必须大于2个字符且小于36个字符\n2.名称不允许包含控制字符(如换行等)";
                 }
 
                 try
                 {
-                    if (int.Parse(sendedJson["version"].ToString()) < 1)
+                    if (int.Parse(sendedJson["version"].ToString(Formatting.None)) < 1)
                     {
                         err = "您的轻启嫩谈版本过低,请更新至最新版本";
                     }
@@ -1358,10 +1361,10 @@ namespace LightStart_BBS_server
 
                 if (err == "")
                 {
-                    string token = Form1.regUser(userInfoJson["id"].ToString(), userInfoJson["name"].ToString().Replace(" ", ""), userInfoJson["password"].ToString(), userInfoJson["salt"].ToString(), userInfoJson["sharedKey"].ToString());
+                    string token = Form1.regUser(userInfoJson["id"].ToString(Formatting.None), userInfoJson["name"].ToString(Formatting.None).Replace(" ", ""), userInfoJson["password"].ToString(Formatting.None), userInfoJson["salt"].ToString(Formatting.None), userInfoJson["sharedKey"].ToString(Formatting.None));
                     result = new Message(MESSAGE_RETURN_TOKEN, true, token, "server").toJsonString();
 
-                    Form1.log(">> 用户 " + userInfoJson["id"].ToString() + " 注册: " + userInfoJson.ToString());
+                    Form1.log(">> 用户 " + userInfoJson["id"].ToString(Formatting.None) + " 注册: " + userInfoJson.ToString(Formatting.None));
                 }
                 else
                 {
@@ -1375,7 +1378,7 @@ namespace LightStart_BBS_server
                 string result = "";
                 JObject userInfoJson = JObject.Parse(message.data);
                 JObject sendedJson = message.toJson();
-                Dictionary<string, string> user = Form1.getUserByIDPW(userInfoJson["id"].ToString(), userInfoJson["password"].ToString());
+                Dictionary<string, string> user = Form1.getUserByIDPW(userInfoJson["id"].ToString(Formatting.None), userInfoJson["password"].ToString(Formatting.None));
                 string err = "";
                 bool return_old_verison = true;
 
@@ -1386,7 +1389,7 @@ namespace LightStart_BBS_server
 
                 try
                 {
-                    if (int.Parse(sendedJson["version"].ToString()) < 1)
+                    if (int.Parse(sendedJson["version"].ToString(Formatting.None)) < 1)
                     {
                         err = "您的轻启嫩谈版本过低,请更新至最新版本";
                     }
@@ -1399,12 +1402,12 @@ namespace LightStart_BBS_server
 
                 if (err == "")
                 {
-                    Form1.ChangeUserToken(userInfoJson["id"].ToString());
-                    user = Form1.getUserByIDPW(userInfoJson["id"].ToString(), userInfoJson["password"].ToString());
+                    Form1.ChangeUserToken(userInfoJson["id"].ToString(Formatting.None));
+                    user = Form1.getUserByIDPW(userInfoJson["id"].ToString(Formatting.None), userInfoJson["password"].ToString(Formatting.None));
                     result = new Message(MESSAGE_RETURN_TOKEN, true, user["token"], "server").toJsonString();
 
                     userInfoJson["password"] = "***";
-                    Form1.log(">> 用户 " + userInfoJson["id"].ToString() + " 登录: " + userInfoJson.ToString());
+                    Form1.log(">> 用户 " + userInfoJson["id"].ToString(Formatting.None) + " 登录: " + userInfoJson.ToString(Formatting.None));
                 }
                 else
                 {
@@ -1426,7 +1429,7 @@ namespace LightStart_BBS_server
                         { "sharedKey", user["sharedKey"] },
                         { "usergroup", user["usergroup"] }
                     };
-                    result = new Message(MESSAGE_RETURN_USER_INFO, true, userInfo.ToString(), "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_USER_INFO, true, userInfo.ToString(Formatting.None), "server").toJsonString();
                 }
                 else
                 {
