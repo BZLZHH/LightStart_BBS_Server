@@ -29,24 +29,27 @@ namespace LightStart_BBS_server
             InitializeComponent();
             DateTime now = DateTime.Now;
             string formattedDate = now.ToString("yyyy.MM.dd_HH_mm");
-            logFileName = "LSBBS_LOG_" + formattedDate + ".log";
-
+            string logDirecnary = ".\\lsbbs_log";
+            logFileName = logDirecnary + "\\LSBBS_LOG_" + formattedDate + ".log";
+            if (!Directory.Exists(logDirecnary))
+                Directory.CreateDirectory(logDirecnary);
             LogBox = Log;
+            log("日志文件将被会保存至 " + logFileName + "\r\n");
             CheckForIllegalCrossThreadCalls = false;
             // 替换为你的SQLite数据库文件路径和表名
-            string filePath = "./server_user.db";
+            string filePath = ".\\server_user.db";
             string tableName = "BBS_server_user";
             manager_user = new SQLiteManager(filePath, tableName);
             // 创建SQLiteManager实例并连接数据库
-            string filePath_forum = "./server_forum.db";
+            string filePath_forum = ".\\server_forum.db";
             string tableName_forum = "BBS_server_forum";
             manager_forum = new SQLiteManager(filePath_forum, tableName_forum);
 
             bool user_db_availabe = false;
             try
-            { 
+            {
                 manager_user.SelectAll();
-                user_db_availabe = true; 
+                user_db_availabe = true;
             }
             catch
             {
@@ -76,7 +79,7 @@ namespace LightStart_BBS_server
                 columns["ban"] = "TEXT";
                 columns["moreInfoJson"] = "TEXT";
                 manager_user.CreateTable(tableName, columns);
-                log("创建 BBS_server_user 表格\r\n");
+                log("创建 BBS_server_user 表格");
             }
 
             if (!forum_db_availabe)
@@ -96,11 +99,11 @@ namespace LightStart_BBS_server
                 columns["text"] = "TEXT"; //markdown
                 columns["moreInfoJson"] = "TEXT";
                 manager_forum.CreateTable(tableName_forum, columns);
-                log("创建 BBS_server_forum 表格\r\n");
+                log("创建 BBS_server_forum 表格");
             }
 
             server.Start();
-            log("服务器已开启\r\n");
+            log("服务器已开启");
         }
 
         public static void CreateFile(string fileName, string textToWrite)
@@ -127,7 +130,7 @@ namespace LightStart_BBS_server
             }
         }
 
-    public static void changeUserID(string id_before, string id_after)
+        public static void changeUserID(string id_before, string id_after)
         {
             Dictionary<string, string> row = new Dictionary<string, string>();
             row.Add("id", id_after);
@@ -155,6 +158,14 @@ namespace LightStart_BBS_server
             manager_user.Delete(condition);
         }
 
+        public static void deleteForumBoard(int id)
+        {
+            string condition = $"type='{SQLiteManager.encrypt("1")}' AND id='{SQLiteManager.encrypt(id.ToString())}'";
+            manager_forum.Delete(condition);
+            string condition2 = $"type='{SQLiteManager.encrypt("2")}' AND forumgroup='{SQLiteManager.encrypt(id.ToString())}'";
+            manager_forum.Delete(condition2);
+        }
+
         public static int getUserGroup(string id)
         {
             Dictionary<string, string> valuePairs = getUserByIDPW(id, "");
@@ -169,10 +180,79 @@ namespace LightStart_BBS_server
             manager_user.Update(row, condition);
         }
 
-        public static List<Dictionary<string,string>> getForumBoards()
+        public static List<Dictionary<string, string>> getForumBoards(bool autoSort=true)
         {
-            string condition = "type='"+ SQLiteManager.encrypt("1")+"'";
-            return manager_forum.SelectWhere(condition);
+            string condition = "type='" + SQLiteManager.encrypt("1") + "'";
+            List<Dictionary<string, string>> boards = manager_forum.SelectWhere(condition);
+            if (autoSort)
+            {
+                boards.Sort((dict1, dict2) =>
+                {
+                    // 将"id"值转换为整数类型
+                    int id1 = int.Parse(dict1["id"]);
+                    int id2 = int.Parse(dict2["id"]);
+
+                    // 使用整数值进行比较
+                    return id1.CompareTo(id2);
+                });
+            }
+
+            return boards;
+        }
+
+        public static void setForumBoardsTitle(int id,string zhText="",string enText="")
+        {
+            Dictionary<string, string> row = new Dictionary<string, string>();
+            JObject titleJson = new JObject();
+            if (zhText != "")
+                titleJson.Add("zh", zhText);
+            if (enText != "")
+                titleJson.Add("en", enText);
+            row.Add("boardName", titleJson.ToString());
+            string condition = $"type='{SQLiteManager.encrypt("1")}' AND id='{SQLiteManager.encrypt(id.ToString())}'";
+            manager_forum.Update(row, condition);
+        }
+
+        public static void swapForumBoards(int id1, int id2)
+        {
+            //切换board
+            string condition1 = $"type='{SQLiteManager.encrypt("1")}' AND id='{SQLiteManager.encrypt(id1.ToString())}'";
+            string condition2 = $"type='{SQLiteManager.encrypt("1")}' AND id='{SQLiteManager.encrypt(id2.ToString())}'";
+            Dictionary<string, string> row1 = new Dictionary<string, string>
+            {
+                { "id", manager_forum.SelectWhere(condition1)[0]["id"] }
+            };
+            Dictionary<string, string> row2 = new Dictionary<string, string>
+            {
+                { "id", manager_forum.SelectWhere(condition2)[0]["id"] }
+            };
+            Dictionary<string, string> row2_tmp = new Dictionary<string, string>
+            {
+                { "id", "row2before" }
+            };
+            string condition2_tmp = $"type='{SQLiteManager.encrypt("1")}' AND id='{SQLiteManager.encrypt("row2before")}'";
+            manager_forum.Update(row2_tmp, condition2);
+            manager_forum.Update(row2, condition1);
+            manager_forum.Update(row1, condition2_tmp);
+            //切换post
+            condition1 = $"type='{SQLiteManager.encrypt("2")}' AND forumgroup='{SQLiteManager.encrypt(id1.ToString())}'";
+            condition2 = $"type='{SQLiteManager.encrypt("2")}' AND forumgroup='{SQLiteManager.encrypt(id2.ToString())}'";
+            row1 = new Dictionary<string, string>
+            {
+                { "forumgroup", id1.ToString() }
+            };
+            row2 = new Dictionary<string, string>
+            {
+                { "forumgroup", id2.ToString() }
+            };
+            row2_tmp = new Dictionary<string, string>
+            {
+                { "forumgroup", "group2before" }
+            };
+            condition2_tmp = $"type='{SQLiteManager.encrypt("2")}' AND forumgroup='{SQLiteManager.encrypt("group2before")}'";
+            manager_forum.Update(row2_tmp, condition2);
+            manager_forum.Update(row2, condition1);
+            manager_forum.Update(row1, condition2_tmp);
         }
 
         public static void addForumBoard(string title_json)
@@ -181,7 +261,13 @@ namespace LightStart_BBS_server
             int id = 0;
             try
             {
-                id = int.Parse(boards[boards.Count - 1]["id"]) + 1;
+                foreach (var i in boards)
+                {
+                    if (int.Parse(i["id"]) > id)
+                    {
+                        id = int.Parse(i["id"]) + 1;
+                    }
+                }
             }
             catch { }
             Dictionary<string, string> row = new Dictionary<string, string>();
@@ -232,7 +318,7 @@ namespace LightStart_BBS_server
             string result = "";
             for (int i = 0; i < length; i++)
             {
-                int type = 0; 
+                int type = 0;
                 switch (difficulty)
                 {
                     case 0:
@@ -309,7 +395,13 @@ namespace LightStart_BBS_server
             int id = 0;
             try
             {
-                id = int.Parse(posts[posts.Count - 1]["id"]) + 1;
+                foreach(var i in posts) 
+                {
+                    if (int.Parse(i["id"]) > id)
+                    {
+                        id = int.Parse(i["id"]) + 1;
+                    }
+                }
             }
             catch { }
             row["id"] = id.ToString();
@@ -323,14 +415,14 @@ namespace LightStart_BBS_server
             manager_forum.Insert(row);
         }
 
-        public static Dictionary<string,string> getPost(string id)
+        public static Dictionary<string, string> getPost(string id)
         {
-            return manager_forum.SelectWhere($"type='"+ SQLiteManager.encrypt("2")+"' AND id='"+ SQLiteManager.encrypt(id)+"'")[0];
+            return manager_forum.SelectWhere($"type='" + SQLiteManager.encrypt("2") + "' AND id='" + SQLiteManager.encrypt(id) + "'")[0];
         }
 
-        public static List<Dictionary<string,string>> getEveryPost()
+        public static List<Dictionary<string, string>> getEveryPost()
         {
-            return manager_forum.SelectWhere("type='"+ SQLiteManager.encrypt("2")+"'");
+            return manager_forum.SelectWhere("type='" + SQLiteManager.encrypt("2") + "'");
         }
 
         void restartServer()
@@ -371,9 +463,9 @@ namespace LightStart_BBS_server
             return idAvailable;
         }
 
-        public static List<Dictionary<string,string>> getPostsByGroup(string group)
+        public static List<Dictionary<string, string>> getPostsByGroup(string group)
         {
-            string condition = $"type='"+ SQLiteManager.encrypt("2")+"' AND forumgroup='"+ SQLiteManager.encrypt(group) +"'";
+            string condition = $"type='" + SQLiteManager.encrypt("2") + "' AND forumgroup='" + SQLiteManager.encrypt(group) + "'";
             return manager_forum.SelectWhere(condition);
         }
 
@@ -401,7 +493,7 @@ namespace LightStart_BBS_server
 
         public static Dictionary<string, string> getUserByToken(string token)
         {
-            List<Dictionary<string, string>> list = manager_user.SelectWhere("token='"+ SQLiteManager.encrypt(token) +"'");
+            List<Dictionary<string, string>> list = manager_user.SelectWhere("token='" + SQLiteManager.encrypt(token) + "'");
             Dictionary<string, string> user = new Dictionary<string, string>();
             if (list.Count == 1)
             {
@@ -458,14 +550,14 @@ namespace LightStart_BBS_server
 
         public class Constants
         {
-            public const int version = 2;
+            public const int version = 3;
 
-            public static readonly string[] USERGROUPS = {"default","vip","admin", "vip-" }; // 顺序要与下面一致
+            public static readonly string[] USERGROUPS = { "default", "vip", "admin", "vip-" }; // 顺序要与下面一致
             public const int USERGROUP_default = 0;
             public const int USERGROUP_vip = 1;
             public const int USERGROUP_admin = 2;
             public const int USERGROUP_vip_low = 3;
-        }; 
+        };
 
         public class SQLiteManager
         {
@@ -541,10 +633,13 @@ namespace LightStart_BBS_server
 
             public SQLiteManager(string filePath, string tableName)
             {
-                this.tableName = tableName;
-                connection = new SQLiteConnection("Data Source=" + filePath);
-                connection.Open();
-                command = new SQLiteCommand(connection);
+                if(filePath!="")
+                {
+                    this.tableName = tableName;
+                    connection = new SQLiteConnection("Data Source=" + filePath);
+                    connection.Open();
+                    command = new SQLiteCommand(connection);
+                }
             }
 
             // 创建一个表
@@ -566,7 +661,7 @@ namespace LightStart_BBS_server
                 string encryptedData = Convert.ToBase64String(bytes);
                 encryptedData = encryptedData.Replace("/", replaced_slash);
                 return encryptedData;
-            } 
+            }
 
             public static string decrypt(string str)
             {
@@ -587,7 +682,7 @@ namespace LightStart_BBS_server
             {
                 string query = "SELECT * FROM " + tableName;
                 List<Dictionary<string, string>> list = ExecuteQuery(query);
-                foreach(Dictionary<string,string> item in list)
+                foreach (Dictionary<string, string> item in list)
                 {
                     foreach (string key in item.Keys)
                     {
@@ -862,7 +957,7 @@ namespace LightStart_BBS_server
                                         break;
                                     }
                             }
-                            if(!switch_runned)
+                            if (!switch_runned)
                             {
                                 Message message = JsonConvert.DeserializeObject<Message>(receivedData); System.Diagnostics.Debug.WriteLine(message.token);
                                 string return_msg = "";
@@ -878,7 +973,7 @@ namespace LightStart_BBS_server
                                         message.data = data.ToString();
                                         Form1.log("收到 无token 信息: \n" + message.toJsonString());
                                         data["password"] = password;
-                                        message.data=data.ToString();
+                                        message.data = data.ToString();
                                     }
                                     switch (message.type)
                                     {
@@ -966,12 +1061,12 @@ namespace LightStart_BBS_server
                                     }
                                     else
                                     {
-                                        Form1.log("收到 失效token用户 信息: \n" + receivedData);
+                                        Form1.log("收到 失效token 信息: \n" + receivedData);
                                         Form1.log("+并返回: \n" + return_msg);
                                     }
                                 }
 
-                                
+
                             }
                         }
                         catch (Exception ex)
@@ -1033,7 +1128,7 @@ namespace LightStart_BBS_server
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_POST, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_POST, false, "用户登录信息已失效", "server").toJsonString();
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
@@ -1053,7 +1148,7 @@ namespace LightStart_BBS_server
                     //检查forumgroup poster title text
                     JObject data = JObject.Parse(message.data);
                     bool right = true;
-                    try 
+                    try
                     {
                         data["forumgroup"].ToString();
                         if (data["title"].ToString().Trim() == "" || data["text"].ToString().Trim() == "" || !CheckPostTitleValidity(data["title"].ToString()))
@@ -1070,12 +1165,12 @@ namespace LightStart_BBS_server
                     }
                     else
                     {
-                        result = new Message(MESSAGE_RETURN_ADD_POST, false, "ERROR: 提供的参数不符合要求", "server").toJsonString();
+                        result = new Message(MESSAGE_RETURN_ADD_POST, false, "提供的参数不符合要求", "server").toJsonString();
                     }
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_ADD_POST, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_ADD_POST, false, "用户登录信息已失效", "server").toJsonString();
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
@@ -1110,7 +1205,7 @@ namespace LightStart_BBS_server
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_ALL_POSTS, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_ALL_POSTS, false, "用户登录信息已失效", "server").toJsonString();
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
@@ -1140,7 +1235,7 @@ namespace LightStart_BBS_server
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_USER_INFO_PUBLIC, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_USER_INFO_PUBLIC, false, "用户登录信息已失效", "server").toJsonString();
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
@@ -1164,12 +1259,12 @@ namespace LightStart_BBS_server
                     }
                     else
                     {
-                        result = new Message(MESSAGE_RETURN_ADD_BOARD, false, "ERROR: 你没有权限执行此操作", "server").toJsonString();
+                        result = new Message(MESSAGE_RETURN_ADD_BOARD, false, "你没有权限执行此操作", "server").toJsonString();
                     }
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_ADD_BOARD, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_ADD_BOARD, false, "用户登录信息已失效", "server").toJsonString();
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
@@ -1186,23 +1281,31 @@ namespace LightStart_BBS_server
                 Dictionary<string, string> user = Form1.getUserByToken(message.token);
                 if (user["available"] == "true")
                 {
-                    JObject json = new JObject();
-                    JArray textZH = new JArray();
-                    JArray textEN = new JArray();
-                    List<Dictionary<string, string>> list = Form1.getForumBoards();
-                    List<Dictionary<string, string>> sortedList = list.OrderBy(dict => int.Parse(dict["id"])).ToList();
-                    foreach(Dictionary<string,string> key in sortedList)
+                    if (message.version < 3)
                     {
-                        textZH.Add(JObject.Parse(key["boardName"])["zh"].ToString());
-                        textEN.Add(JObject.Parse(key["boardName"])["en"].ToString());
+                        result = new Message(MESSAGE_RETURN_BOARDS, false, "您的轻启嫩谈版本过低,请更新至最新版本", "server").toJsonString();
                     }
-                    json.Add("zh",textZH);
-                    json.Add("en",textEN);
-                    result = new Message(MESSAGE_RETURN_BOARDS, true, json.ToString(), "server").toJsonString();
+                    else
+                    {
+                        List<Dictionary<string, string>> list = Form1.getForumBoards();
+                        JArray json = new JArray();
+                        foreach (var i in list)
+                        {
+                            JObject titles = JObject.Parse(i["boardName"]);
+                            JObject tmp = new JObject
+                        {
+                            { "id", i["id"] },
+                            { "title_zh", titles["zh"].ToString() },
+                            { "title_en", titles["en"].ToString() },
+                        };
+                            json.Add(tmp);
+                        }
+                        result = new Message(MESSAGE_RETURN_BOARDS, true, json.ToString(), "server").toJsonString();
+                    }
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_BOARDS, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_BOARDS, false, "用户登录信息已失效", "server").toJsonString();
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
@@ -1262,7 +1365,7 @@ namespace LightStart_BBS_server
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_TOKEN, false, "ERROR: " + err, "server", return_old_verison).toJsonString();
+                    result = new Message(MESSAGE_RETURN_TOKEN, false, err, "server", return_old_verison).toJsonString();
                 }
                 return result;
             }
@@ -1305,7 +1408,7 @@ namespace LightStart_BBS_server
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_TOKEN, false, "ERROR: " + err, "server", return_old_verison).toJsonString();
+                    result = new Message(MESSAGE_RETURN_TOKEN, false, err, "server", return_old_verison).toJsonString();
                 }
                 return result;
             }
@@ -1327,7 +1430,7 @@ namespace LightStart_BBS_server
                 }
                 else
                 {
-                    result = new Message(MESSAGE_RETURN_USER_INFO, false, "ERROR: 用户登录信息已失效", "server").toJsonString();
+                    result = new Message(MESSAGE_RETURN_USER_INFO, false, "用户登录信息已失效", "server").toJsonString();
                 }
                 string[] return_value = new string[2];
                 return_value[0] = result;
@@ -1367,8 +1470,8 @@ namespace LightStart_BBS_server
 
         private void userGroupChange_Click(object sender, EventArgs e)
         {
-            userManager userManager_ = new userManager(); // 创建clientMsgboxSetting的实例
-            userManager_.ShowDialog(); // 以模态窗口的方式显示clientMsgboxSetting窗体        
+            manager manager_ = new manager(); // 创建clientMsgboxSetting的实例
+            manager_.ShowDialog(); // 以模态窗口的方式显示clientMsgboxSetting窗体        
         }
     }
 }
