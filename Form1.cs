@@ -6,11 +6,16 @@ using Newtonsoft.Json.Linq;
 using System.Data.SQLite;
 using XSystem.Security.Cryptography;
 using XAct;
+using SevenZip;
 using System.Text.RegularExpressions;
 using System.Windows.Forms.VisualStyles;
 using System.Collections.Generic;
 using System.Data;
 using System.Text.Json.Nodes;
+using System.IO.Compression;
+using CompressionLevel = SevenZip.CompressionLevel;
+using System;
+using CompressionMode = SevenZip.CompressionMode;
 
 namespace LightStart_BBS_server
 {
@@ -23,8 +28,8 @@ namespace LightStart_BBS_server
         public static TextBox LogBox;
 
         public static string logFileName = "";
-        public static string logDirecnary = ".\\lsbbs_log";
-        public static string errorDirecnary = ".\\error";
+        public static string logDirectory = ".\\lsbbs_log";
+        public static string errorDirectory = ".\\error";
 
         public Form1()
         {
@@ -32,11 +37,11 @@ namespace LightStart_BBS_server
             InitializeComponent();
             DateTime now = DateTime.Now;
             string formattedDate = now.ToString("yyyy.MM.dd_HH_mm");
-            logFileName = logDirecnary + "\\LSBBS_LOG_" + formattedDate + ".log";
-            if (!Directory.Exists(logDirecnary))
-                Directory.CreateDirectory(logDirecnary);
-            if (!Directory.Exists(errorDirecnary))
-                Directory.CreateDirectory(errorDirecnary);
+            logFileName = logDirectory + "\\LSBBS_LOG_" + formattedDate + ".log";
+            if (!Directory.Exists(logDirectory))
+                Directory.CreateDirectory(logDirectory);
+            if (!Directory.Exists(errorDirectory))
+                Directory.CreateDirectory(errorDirectory);
             LogBox = Log;
             log("日志文件将被会保存至 " + logFileName + "\r\n");
             CheckForIllegalCrossThreadCalls = false;
@@ -106,10 +111,29 @@ namespace LightStart_BBS_server
                 log("创建 BBS_server_forum 表格");
             }
 
+            Extract7zDll();
             server.Start();
             log("服务器已开启");
         }
 
+        void Extract7zDll()
+        {
+            string dllName = "7z.dll";
+            string currentDirectory = Directory.GetCurrentDirectory();
+            string dllPath = Path.Combine(currentDirectory, dllName);
+
+            if (!File.Exists(dllPath))
+            {
+                // 从嵌入资源中提取7z.dll到当前目录
+                using (Stream resourceStream = typeof(Form1).Assembly.GetManifestResourceStream("LightStart_BBS_server.7z.dll"))
+                {
+                    using (FileStream fileStream = new FileStream(dllPath, FileMode.Create))
+                    {
+                        resourceStream.CopyTo(fileStream);
+                    }
+                }
+            }
+        }
         public static void CreateFile(string fileName, string textToWrite)
         {
             // 在程序运行目录下创建一个 Windows 文件
@@ -451,6 +475,67 @@ namespace LightStart_BBS_server
             log("正在关闭数据库及服务器\r\n");
             manager_user.Close();
             server.Stop();
+        }
+
+        public static void updateErrorDirectory()
+        {
+            DateTime now = DateTime.Now;
+            string formattedDate = now.ToString("yyyy_MM_dd");
+            string zipFilePath = Path.Combine(errorDirectory, $"error_{formattedDate}_.7z");
+            try
+            {
+
+                string[] files = Directory.GetFiles(errorDirectory);
+                SevenZipCompressor compressor = new SevenZipCompressor();
+                compressor.ArchiveFormat = OutArchiveFormat.SevenZip;
+                compressor.CompressionMode = CompressionMode.Create;
+                compressor.CompressionLevel = CompressionLevel.Fast;
+                compressor.CompressionMethod = CompressionMethod.Default;
+                compressor.TempFolderPath = Path.GetTempPath(); // 设置临时文件夹路径
+
+                if (!File.Exists(zipFilePath))
+                {
+                    SevenZipBase.SetLibraryPath(".\\7z.dll");
+                    string emptyFilePath = Path.Combine(Path.GetTempPath(), "empty.txt");
+                    File.WriteAllText(emptyFilePath, string.Empty); // 创建一个空的文本文件
+                    compressor.CompressFiles(zipFilePath, emptyFilePath); // 压缩空文件到指定路径
+                    File.Delete(emptyFilePath);
+                }
+
+                compressor.CompressionMode = CompressionMode.Append;
+                files = Directory.GetFiles(errorDirectory, "*.txt", SearchOption.TopDirectoryOnly);
+
+                foreach (var file in files)
+                {
+                    compressor.CompressFiles(zipFilePath, file);
+                }
+
+                files = Directory.GetFiles(errorDirectory);
+                foreach (string file in files)
+                {
+                    if (!file.Equals(zipFilePath))
+                    {
+                        File.Delete(file);
+                    }
+                }
+            }
+            catch(Exception e)
+            {
+                log(e.Message, false, false);
+            }
+        }
+
+        public static void checkErrorLog() //删除超过24h的错误日志压缩文件
+        {
+            string[] files = Directory.GetFiles(errorDirectory);
+            foreach (string file in files)
+            {
+                DateTime creationTime = File.GetCreationTime(file);
+                if (DateTime.Now - creationTime > TimeSpan.FromHours(24))
+                {
+                    File.Delete(file);
+                }
+            }
         }
 
         public static bool checkIDAvailable(string id)
@@ -1081,15 +1166,16 @@ namespace LightStart_BBS_server
                             string formattedDate = now.ToString("yyyyMMdd");
                             string error_code = formattedDate + RandomStr(4, 2);
                             error_code = SQLiteManager.encrypt(error_code);
-
-                            string filePath = Path.Combine(Environment.CurrentDirectory, $"{errorDirecnary}\\{error_code}.txt");
+                            Form1.checkErrorLog();
+                            string filePath = Path.Combine(Environment.CurrentDirectory, $"{errorDirectory}\\{error_code}.txt");
                             using (StreamWriter sw = File.AppendText(filePath))
                             {
                                 sw.WriteLine($"IP Address: {ip}\nReceived Message:\n{receivedData}\n\nerr:\n{ex.Message}");
                             }
+                            Form1.updateErrorDirectory();
                             log($"处理操作时出现错误 (code: {error_code}):{ex.Message}", ip: ip);
 
-                            sendData(new Message(MESSAGE_ERROR, false, $"服务端在处理您的操作时出现错误,请重试\n本次错误代号: {error_code}\n若多次重试仍出错,请截图此页面(或发送错误代号)至我们的邮箱: lsbbs@bzlzhh.top", "server").toJsonString());
+                            sendData(new Message(MESSAGE_ERROR, false, $"服务端在处理您的操作时出现错误,请重试\n\n若多次重试仍出错,请在24小时内截图此页面(或发送错误代号)至我们的邮箱: lsbbs@bzlzhh.top\n本次错误代号: {error_code}", "server").toJsonString());
                         }
                     }
                 }

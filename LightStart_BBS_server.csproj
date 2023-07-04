@@ -9,9 +9,22 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="7z.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="SevenZipSharp.Interop" Version="19.0.2" />
     <PackageReference Include="System.Data.SQLite" Version="1.0.118" />
     <PackageReference Include="XAct.Core.PCL" Version="0.0.5014" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SevenZipSharpInteropFiles Remove="7z.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="7z.dll" />
   </ItemGroup>
 
 </Project>
