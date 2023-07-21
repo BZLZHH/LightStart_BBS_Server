@@ -153,7 +153,7 @@ namespace LightStart_BBS_server
                 return false;
             }
 
-            string key = Form1.RandomStr(length, difficulty);
+            string key = Form1.randomStr(length, difficulty);
             int riskSeverity = (int)(Math.Round(0.056 * Math.Pow(length , 2) + 0.167 * length + 0.778)) + //length计算风险程度:y=0.056x^2+0.167x+0.778
                 (int)(Math.Round(0.5 * Math.Pow(difficulty , 2) + 1.5 * difficulty + 1)); //difficulty计算风险程度:y=0.5x^2+1.5x+1
             string message = "";
