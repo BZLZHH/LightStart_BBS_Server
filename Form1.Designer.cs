@@ -46,7 +46,7 @@
             this.restart.Text = "Restart Server";
             this.restart.UseVisualStyleBackColor = true;
             this.restart.Visible = false;
-            this.restart.Click += new System.EventHandler(this.restart_Click);
+            this.restart.Click += new System.EventHandler(this.Restart_Click);
             // 
             // Log
             // 
@@ -80,7 +80,7 @@
             this.clientMsgboxChange.TabIndex = 3;
             this.clientMsgboxChange.Text = "Client Msgbox Setting";
             this.clientMsgboxChange.UseVisualStyleBackColor = true;
-            this.clientMsgboxChange.Click += new System.EventHandler(this.clientMsgboxChange_Click);
+            this.clientMsgboxChange.Click += new System.EventHandler(this.ClientMsgboxChange_Click);
             // 
             // manager
             // 
@@ -92,7 +92,7 @@
             this.manager.TabIndex = 4;
             this.manager.Text = "Manager";
             this.manager.UseVisualStyleBackColor = true;
-            this.manager.Click += new System.EventHandler(this.userGroupChange_Click);
+            this.manager.Click += new System.EventHandler(this.UserGroupChange_Click);
             // 
             // Form1
             // 

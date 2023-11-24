@@ -75,7 +75,7 @@ namespace LightStart_BBS_server
             List_forumBoards.Columns.Add("Title_ZH", 80);
             List_forumBoards.Columns.Add("Title_EN", 140);
 
-            list = Form1.getForumBoards();
+            list = Form1.GetForumBoards();
             foreach (var item in list)
             {
                 string id = item["id"];
@@ -177,7 +177,7 @@ namespace LightStart_BBS_server
                 string id = this.List_user.Items[List_user.SelectedIndices[0]].SubItems[0].Text;
                 if (VerifyAction(2, 8, $"是否删除用户 {id}"))
                 {
-                    Form1.deleteUser(id);
+                    Form1.DeleteUser(id);
                     RefreshList();
                     MessageBox.Show("已删除", "提示");
                 }
@@ -192,7 +192,7 @@ namespace LightStart_BBS_server
                 string id = this.List_user.Items[List_user.SelectedIndices[0]].SubItems[0].Text;
                 if (VerifyAction(1, 4, $"是否修改用户 {id} 的 Group 为 {groupBox.Text}"))
                 {
-                    Form1.setUserGroup(id, group);
+                    Form1.SetUserGroup(id, group);
                     RefreshList();
                     MessageBox.Show("已修改", "提示");
                 }
@@ -208,7 +208,7 @@ namespace LightStart_BBS_server
                 string id_after = IDInput.Text;
                 if (VerifyAction(1, 5, $"是否修改用户 {id} 的 ID 为 {id_after}"))
                 {
-                    Form1.changeUserID(id, id_after);
+                    Form1.ChangeUserID(id, id_after);
                     RefreshList();
                     MessageBox.Show("已修改", "提示");
                 }
@@ -223,7 +223,7 @@ namespace LightStart_BBS_server
                 string invitationKey_after = InvitationKeyInput.Text;
                 if (VerifyAction(0, 5, $"是否修改用户 {id} 的 InvitationKey 为 {invitationKey_after}"))
                 {
-                    Form1.changeUserInvitationKey(id, invitationKey_after);
+                    Form1.ChangeUserInvitationKey(id, invitationKey_after);
                     RefreshList();
                     MessageBox.Show("已修改", "提示");
                 }
@@ -239,7 +239,7 @@ namespace LightStart_BBS_server
                 string name_after = NameInput.Text;
                 if (VerifyAction(0, 6, $"是否修改用户 {id} 的 Name 为 {name_after}"))
                 {
-                    Form1.changeUserName(id, name_after);
+                    Form1.ChangeUserName(id, name_after);
                     RefreshList();
                     MessageBox.Show("已修改", "提示");
                 }
@@ -255,7 +255,7 @@ namespace LightStart_BBS_server
                 string id = this.List_forumBoards.Items[List_forumBoards.SelectedIndices[0]].SubItems[0].Text;
                 if (VerifyAction(0, 4, $"是否修改论坛板块 {id} 的 Title 为 zh: {zh_text} en: {en_text}"))
                 {
-                    Form1.setForumBoardsTitle(int.Parse(id), zh_text, en_text);
+                    Form1.SetForumBoardsTitle(int.Parse(id), zh_text, en_text);
                     RefreshList();
                     MessageBox.Show("已修改", "提示");
                 }
@@ -270,7 +270,7 @@ namespace LightStart_BBS_server
             {
                 if (VerifyAction(1, 5, $"是否将论坛板块 {id1} 与论坛板块 {id2} 交换顺序"))
                 {
-                    Form1.swapForumBoards(int.Parse(id1), int.Parse(id2));
+                    Form1.SwapForumBoards(int.Parse(id1), int.Parse(id2));
                     RefreshList();
                     MessageBox.Show("已修改", "提示");
                 }
@@ -300,7 +300,7 @@ namespace LightStart_BBS_server
                 string id = this.List_forumBoards.Items[List_forumBoards.SelectedIndices[0]].SubItems[0].Text;
                 if (VerifyAction(2, 10, $"是否删除论坛板块 ID: {id}\n注意: 所有帖子将会一同删除,请谨慎操作"))
                 {
-                    Form1.deleteForumBoard(int.Parse(id));
+                    Form1.DeleteForumBoard(int.Parse(id));
                     RefreshList();
                     MessageBox.Show("已删除", "提示");
                 }
