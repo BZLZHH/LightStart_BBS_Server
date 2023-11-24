@@ -441,7 +441,7 @@ namespace LightStart_BBS_server
             row["ban"] = "";
             row["moreInfoJson"] = "";
             manager_user.Insert(row);
-            return row["token"];
+            return token;
         }
 
         public static List<Dictionary<string, string>> GetAllTopics(string postID)
